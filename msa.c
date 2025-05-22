@@ -159,7 +159,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("_pattern_ `{` _expression_ `}` [ `:` `{` _link-expression_ `}` ]");
 	puts("\t_expression_ is evaluated whenever _pattern_ is matched in an assembly source file.");
-	puts("\t_link-expression_ is an optional expression to be evaluated when resolving symbol addresses; it will not be evaluated if the prior evaluation of _expression_ returns a zero value.");
+	puts("\t_link-expression_ is an optional expression to be evaluated when resolving symbol addresses; it will not be evaluated if the prior evaluation of _expression_ returns a zero value. If _link-expression_ is to be evaluated, the values of the field variants prior to the execution of _expression_ are preserved.");
 	puts("");
 	puts("### expressions");
 	puts("");
