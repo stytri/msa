@@ -322,6 +322,7 @@ static STRING eval_tokenize(
 	int   (*get)(void *),
 	int   (*unget)(int, void *),
 	int   (*getfn)(size_t n, char const s[]),
+	int   (*getconst)(size_t n, char const s[], uint64_t *p),
 	int     end,
 	STRING  token,
 	size_t *linenop
@@ -342,6 +343,7 @@ static STRING eval_tokenize(
 			return STRING(0, NULL);
 		}
 		switch(c) {
+			uint64_t u;
 		case ';':
 			while((c = get(p))) {
 				if(c == '\n') {
@@ -459,7 +461,8 @@ static STRING eval_tokenize(
 			continue;
 		default:
 			if(isdigit(c)) {
-				uint64_t u = eval_getuint(c, p, get, unget);
+				u = eval_getuint(c, p, get, unget);
+		case_uint:
 				if(u <= 63u) {
 					((uint8_t *)t.str)[t.len++] = EVAL_SMALLINT | u;
 					continue;
@@ -561,6 +564,10 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = EVAL_FUNCTION;
 					((uint8_t *)t.str)[t.len++] = i & 255;
 					continue;
+				}
+				i = getconst(n, fn, &u);
+				if(i >= 0) {
+					goto case_uint;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_FUNCTION);
 				continue;

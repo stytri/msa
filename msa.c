@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  1.0.0
+#	define VERSION  1.1.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -318,6 +318,9 @@ static void readme(char *arg0) {
 	puts("_function_");
 	puts("\tThe defined _function_ expression is evaluated.");
 	puts("");
+	puts("_identifier_");
+	puts("\tThe value assigned to (non-function) _identifier_ is returned.");
+	puts("");
 	puts("`INVALID`");
 	puts("\toutputs an invalid operand error message.");
 	puts("\treturns `0`.");
@@ -510,6 +513,15 @@ static int getfunc(size_t n, char const s[]) {
 	return -1;
 }
 
+static int getconst(size_t n, char const s[], uint64_t *p) {
+	SYMBOL *sp = symbol_lookup(N_SYMBOLS, symtab, STRING(n, s));
+	if(sp) {
+		*p = sp->val.u;
+		return 0;
+	}
+	return -1;
+}
+
 static EVAL env = {
 	.trace = trace,
 	.print = report_source_error,
@@ -537,7 +549,7 @@ static int set_byte_bits(int n) {
 //------------------------------------------------------------------------------
 
 static STRING compile_expression(void *p) {
-	STRING expr = eval_tokenize(p, evals_getc, evals_ungetc, getfunc, '}',
+	STRING expr = eval_tokenize(p, evals_getc, evals_ungetc, getfunc, getconst, '}',
 		STRING((N_TOKENS - 1) - n_token,
 			&token[n_token]
 		),
