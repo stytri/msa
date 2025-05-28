@@ -26,6 +26,7 @@ SOFTWARE.
 
 //------------------------------------------------------------------------------
 
+#define N_SETS          (256)
 #define N_STRINGS       (8 * 1021ul)
 #define N_SYMBOLS       (8 * 1021ul)
 #define N_INSTRUCTIONS  (8 * 1021ul)

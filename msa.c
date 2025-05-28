@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  1.1.0
+#	define VERSION  1.2.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -147,6 +147,14 @@ static void readme(char *arg0) {
 	puts("");
 	puts("`{` _identifier_ `:` _replacement_ `}`");
 	puts("\tdefines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and a sequentially calaculated value is assigned to the next available field.");
+	puts("");
+	puts("#### set directives");
+	puts("");
+	puts("`{` _identifier_ `#` _replacement_ `}`");
+	puts("\tdefines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.");
+	puts("\t**set** member data can be exported to a C header file via the `-s` command line option:");
+	puts("\t\tfor each **set** member as a `#define` _set-identifier_`_`_member-identifier_ _member-value_");
+	puts("\t\tand an array _set-identifier_`_name` of _member-identifier_ strings.");
 	puts("");
 	puts("#### function directives");
 	puts("");
@@ -353,6 +361,7 @@ static void readme(char *arg0) {
 
 //------------------------------------------------------------------------------
 
+static char const *setfile    = "";
 static char const *outfile    = "";
 static char const *infile     = "";
 static int         infile_len = 0;
@@ -411,6 +420,7 @@ static size_t   n_xref = 0;
 static SYMTAB  *symtab = NULL;
 static SYMTAB  *funtab = NULL;
 static SYMTAB  *instab = NULL;
+static SYMTAB  *settab = NULL;
 
 static uint8_t *token   = NULL;
 static size_t   n_token = 0;
@@ -572,40 +582,67 @@ static char const *process_directive(char const *cs) {
 	size_t n;
 	char  *s;
 	sym.str = cs;
-	sym.len = n = strcspn(cs, "{:=}");
+	sym.len = n = strcspn(cs, "{#:=}");
 	if(cs[n] == '{') {
-		val = VALUE(u, 0);
+		val = VALUE(p, NULL, 0);
 		cs += n + 1;
 		rpl = compile_expression(&cs);
 		n   = strcspn(cs, "}");
 		cs += n;
-		if(!symbol_intern(N_FUNCTIONS, funtab, '#', sym, rpl, val)) {
+		if(!symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', sym, rpl, val)) {
 			report_source_error("too many functions");
 		}
 	} else {
 		int type = '=';
-		if(cs[n] == ':') {
-			type = ':';
+		if(cs[n] == '#') {
+			type = '#';
 			cs += n + 1;
 			rpl.str = cs;
-			rpl.len = n = strcspn(cs, "=}");
+			rpl.len = n = strcspn(cs, "}");
+			cs += n;
+			if(!symbol_intern(N_SETS, settab, type, sym, rpl, val)) {
+				report_source_error("too many sets");
+			}
 		} else {
-			rpl = sym;
-		}
-		if(cs[n] == '=') {
-			cs += n + 1;
-			val = strtoval(cs, &s);
-			n = strcspn(cs = s, "}");
-		} else {
-			val = VALUE(u, next_val);
-		}
-		cs += n;
-		switch(val.type) {
-		default : break;
-		case 'u': next_val = val.u + 1; break;
-		}
-		if(!symbol_intern(N_SYMBOLS, symtab, type, sym, rpl, val)) {
-			report_source_error("too many symbols");
+			SYMBOL *set = NULL;
+			if(cs[n] == ':') {
+				type = ':';
+				cs += n + 1;
+				rpl.str = cs;
+				rpl.len = n = strcspn(cs, "=}");
+				set = symbol_lookup(N_SETS, settab, rpl);
+				if(set) {
+					rpl = set->rpl;
+				}
+			} else {
+				rpl = sym;
+			}
+			if(cs[n] == '=') {
+				cs += n + 1;
+				val = strtoval(cs, &s);
+				n = strcspn(cs = s, "}");
+			} else {
+				val = VALUE(u, next_val);
+			}
+			cs += n;
+			switch(val.type) {
+			default : break;
+			case 'u': next_val = val.u + 1; break;
+			}
+			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, sym, rpl, val);
+			if(!sp) {
+				report_source_error("too many symbols");
+			} else if(set) {
+				n = set->val.type >> 8;
+				void *p = realloc((void *)set->val.p, (n + 1) * sizeof(set));
+				if(!p) {
+					perror("");
+					abort();
+				}
+				set->val.p = p;
+				((SYMBOL **)set->val.p)[n] = sp;
+				set->val.type += (1 << 8);
+			}
 		}
 	}
 	return cs;
@@ -854,6 +891,7 @@ static struct optget options[] = {
 #ifdef EVAL_TRACE
 	{ 11, "-t, --trace FILE",        "write trace to FILE" },
 #endif//def EVAL_TRACE
+	{ 12, "-s, --set-header FILE",   "write header FILE for sets" },
 };
 static size_t const n_options = (sizeof(options) / sizeof(options[0]));
 
@@ -923,6 +961,9 @@ main(
 				failed = failed || !(traceout = openout(argv[argi], traceout));
 				break;
 #endif//def EVAL_TRACE
+			case 12:
+				setfile = argv[argi];
+				break;
 			default:
 				errorf("invalid option: %s", args);
 				usage(argv[0], stderr);
@@ -938,6 +979,7 @@ main(
 		symtab = calloc(N_SYMBOLS     , sizeof(*symtab));
 		funtab = calloc(N_FUNCTIONS   , sizeof(*funtab));
 		instab = calloc(N_INSTRUCTIONS, sizeof(*instab));
+		settab = calloc(N_SETS        , sizeof(*settab));
 		token  = calloc(N_TOKENS      , sizeof(*token));
 		if(!xref || !symtab  || !funtab || !instab || !token) {
 			perror();
@@ -1120,6 +1162,9 @@ main(
 	if(!failed) {
 		listing("\n; SIZE = %zu\n\n", maxaddr + 1);
 	}
+	if(listout && (listout != stdout)) {
+		fclose(listout);
+	}
 
 	if(!failed && *outfile) DEFER(FILE *out = fopen(outfile, "wb"),
 		!(failed = !out) || qerror(outfile),
@@ -1131,8 +1176,43 @@ main(
 		}
 	}
 
-	if(listout && (listout != stdout)) {
-		fclose(listout);
+	if(!failed && *setfile) DEFER(FILE *out = fopen(setfile, "w"),
+		!(failed = !out) || qerror(setfile),
+		fclose(out)
+	) {
+		int         setnamelen = 0;
+		char const *setname    = getfilename(setfile, &setnamelen);
+		fprintf(out, "#ifndef %.*s__included\n", setnamelen, setname);
+		fprintf(out, "#define %.*s__included 1\n\n", setnamelen, setname);
+		fprintf(out, "// this is a generated file DO NOT edit\n");
+		for(size_t i = 0; i < N_SETS; i++) {
+			if(settab[i].ref == 0) {
+				continue;
+			}
+			fprintf(out, "\n");
+			SYMBOL *sp, **spp, **end;
+			SYMBOL *set = &settab[i].sym;
+			size_t  n   = set->val.type >> 8;
+			for(spp = (SYMBOL **)set->val.p, end = spp + n; spp < end; ) {
+				sp = *spp++;
+				fprintf(out, "#define %.*s_%.*s %llu\n",
+					(int)set->sym.len, (char const *)set->sym.str,
+					(int)sp->sym.len, (char const *)sp->sym.str,
+					sp->val.u
+				);
+			}
+			fprintf(out, "\nstatic char const *%.*s_name[] = {\n",
+				(int)set->sym.len, (char const *)set->sym.str
+			);
+			for(spp = (SYMBOL **)set->val.p, end = spp + n; spp < end; ) {
+				sp = *spp++;
+				fprintf(out, "\t[%llu] = \"%.*s\",\n",
+					sp->val.u, (int)sp->sym.len, (char const *)sp->sym.str
+				);
+			}
+			fprintf(out, "};\n");
+		}
+		fprintf(out, "\n#endif//ndef %.*s__included\n", setnamelen, setname);
 	}
 
 	return failed ? EXIT_FAILURE : EXIT_SUCCESS;

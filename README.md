@@ -1,6 +1,6 @@
 # msa
 
-## Version 1.1.0
+## Version 1.2.0
 
 ## Command Line
 
@@ -8,12 +8,13 @@
 Matching String Assembler: a simple assembler for virtual machines.
 usage: msa [OPTION]... [FILE]...
 options:
-  -h, --help          display this help and exit
-      --version       display version and exit
-      --license       display license and exit
-      --readme        display readme and exit
-  -o, --output FILE   output to FILE
-  -l, --listing FILE  write listing to FILE
+  -h, --help             display this help and exit
+      --version          display version and exit
+      --license          display license and exit
+      --readme           display readme and exit
+  -o, --output FILE      output to FILE
+  -l, --listing FILE     write listing to FILE
+  -s, --set-header FILE  write header FILE for sets
 ```
 
 ## Description
@@ -81,6 +82,14 @@ Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a
 
 `{` _identifier_ `:` _replacement_ `}`
 	defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and a sequentially calaculated value is assigned to the next available field.
+
+#### set directives
+
+`{` _identifier_ `#` _replacement_ `}`
+	defines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.
+	**set** member data can be exported to a C header file via the `-s` command line option:
+		for each **set** member as a `#define` _set-identifier_`_`_member-identifier_ _member-value_
+		and an array _set-identifier_`_name` of _member-identifier_ strings.
 
 #### function directives
 
