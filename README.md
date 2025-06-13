@@ -1,6 +1,6 @@
 # msa
 
-## Version 1.2.0
+## Version 1.2.1
 
 ## Command Line
 
@@ -69,6 +69,9 @@ These directives are identified by a initial `$`:
 `$MEMORY=` _size_
 	where _size_ is the size of memory in **byte**s; ISO/IEC suffixes are recognised - e.g. `Ki` for units of 1024 **byte**s.
 	this directive _must_ be present _before_ assembler instructions are processed.
+
+`$NOCASE`
+	ignore the character case of symbols.
 
 #### identifier directives
 

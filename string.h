@@ -39,9 +39,26 @@ typedef struct {
 #define STRING(STRING__len,STRING__str) \
 	(STRING){ .len = (STRING__len), .str = (STRING__str) }
 
-static inline int equal(STRING l, STRING r) {
+static int case_equal(STRING l, STRING r) {
 	return (l.len == r.len) && (memcmp(l.str, r.str, r.len) == 0);
 }
+
+static inline int memcasecmp(void const *csp, void const *ctp, size_t n) {
+	char const *cs  = csp;
+	char const *ct  = ctp;
+	for(char const *end = cs + n; cs < end; cs++, ct++) {
+		if(toupper(*cs) != toupper(*ct)) {
+			return toupper(*cs) - toupper(*ct);
+		}
+	}
+	return 0;
+}
+
+static int nocase_equal(STRING l, STRING r) {
+	return (l.len == r.len) && (memcasecmp(l.str, r.str, r.len) == 0);
+}
+
+static int (*equal)(STRING l, STRING r) = case_equal;
 
 typedef struct {
 	uint64_t h;

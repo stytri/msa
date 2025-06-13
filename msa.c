@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  1.2.0
+#	define VERSION  1.2.1
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -134,6 +134,9 @@ static void readme(char *arg0) {
 	puts("`$MEMORY=` _size_");
 	puts("\twhere _size_ is the size of memory in **byte**s; ISO/IEC suffixes are recognised - e.g. `Ki` for units of 1024 **byte**s.");
 	puts("\tthis directive _must_ be present _before_ assembler instructions are processed.");
+	puts("");
+	puts("`$NOCASE`");
+	puts("\tignore the character case of symbols.");
 	puts("");
 	puts("#### identifier directives");
 	puts("");
@@ -852,12 +855,7 @@ static char const *compile_instruction(char const *cs) {
 static bool source_file_is_msa(char const *infile, size_t n) {
 	for(size_t m = 0; n-- > 0; ) {
 		if(infile[n] == '.') {
-			if((m == 3)
-				&& (
-					(strncmp(&infile[n + 1], "msa", 3) == 0)
-					|| (strncmp(&infile[n + 1], "MSA", 3) == 0)
-				)
-			) {
+			if((m == 3) && (strncasecmp(&infile[n + 1], "msa", 3) == 0)) {
 				return true;
 			}
 			m = 0;
@@ -1015,7 +1013,7 @@ main(
 		}
 		if(c == '#') {
 			c = *(cs = skipspace(cs + 1));
-			if(strncmp(cs, "line", 4) == 0) {
+			if(strncasecmp(cs, "line", 4) == 0) {
 				c = *(cs = skipspace(cs + 4));
 			}
 			bool line_directive = isdigit(c);
@@ -1052,30 +1050,30 @@ main(
 		if(c == '{') {
 			if(*(cs + 1) == '$') {
 				char *s;
-				if(strncmp(cs+2, "BYTEBITS=", 9) == 0) {
+				if(strncasecmp(cs+2, "BYTEBITS=", 9) == 0) {
 					int n = strtol(cs+11, &s, 10);
 					cs = skipspace(s);
 					if((*cs == '}') && set_byte_bits(n)) {
 						cs++;
 						continue;
 					}
-				} else if(strncmp(cs+2, "BYTEFORMAT=", 11) == 0) {
+				} else if(strncasecmp(cs+2, "BYTEFORMAT=", 11) == 0) {
 					cs = skipspace(cs+13);
-					if(strncmp(cs,"OCTAL", 5) == 0) {
+					if(strncasecmp(cs,"OCTAL", 5) == 0) {
 						cs = skipspace(cs + 5);
 						if(*cs == '}') {
 							byte_format = 0;
 							cs++;
 							continue;
 						}
-					} else if(strncmp(cs,"DECIMAL", 7) == 0) {
+					} else if(strncasecmp(cs,"DECIMAL", 7) == 0) {
 						cs = skipspace(cs+7);
 						if(*cs == '}') {
 							byte_format = 1;
 							cs++;
 							continue;
 						}
-					} else if(strncmp(cs,"HEXADECIMAL", 11) == 0) {
+					} else if(strncasecmp(cs,"HEXADECIMAL", 11) == 0) {
 						cs = skipspace(cs+11);
 						if(*cs == '}') {
 							byte_format = 2;
@@ -1083,7 +1081,7 @@ main(
 							continue;
 						}
 					}
-				} else if(strncmp(cs+2, "ADDRESS=", 8) == 0) {
+				} else if(strncasecmp(cs+2, "ADDRESS=", 8) == 0) {
 					s = (char *)skipspace(cs+10);
 					while(isgraph(*cs) && (*cs != '}')) {
 						cs++;
@@ -1093,7 +1091,7 @@ main(
 						cs++;
 						continue;
 					}
-				} else if(strncmp(cs+2, "INTEGER=", 8) == 0) {
+				} else if(strncasecmp(cs+2, "INTEGER=", 8) == 0) {
 					s = (char *)skipspace(cs+10);
 					while(isgraph(*cs) && (*cs != '}')) {
 						cs++;
@@ -1103,7 +1101,7 @@ main(
 						cs++;
 						continue;
 					}
-				} else if(strncmp(cs+2, "MEMORY=", 7) == 0) {
+				} else if(strncasecmp(cs+2, "MEMORY=", 7) == 0) {
 					sizeof_memory = strtozs(cs+9, &s, 10);
 					cs = skipspace(s);
 					if(*cs == '}') {
@@ -1115,6 +1113,13 @@ main(
 							perror();
 							abort();
 						}
+						cs++;
+						continue;
+					}
+				} else if(strncasecmp(cs+2, "NOCASE", 6) == 0) {
+					s = (char *)skipspace(cs+10);
+					if(*cs == '}') {
+						equal = nocase_equal;
 						cs++;
 						continue;
 					}
