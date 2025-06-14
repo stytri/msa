@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  1.2.1
+#	define VERSION  1.2.2
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -890,6 +890,7 @@ static struct optget options[] = {
 	{ 11, "-t, --trace FILE",        "write trace to FILE" },
 #endif//def EVAL_TRACE
 	{ 12, "-s, --set-header FILE",   "write header FILE for sets" },
+	{ 13, "-y, --symbols PFIX",      "include non-set symbols, adding prefix PFIX, in set header" },
 };
 static size_t const n_options = (sizeof(options) / sizeof(options[0]));
 
@@ -923,6 +924,7 @@ main(
 	char **argv
 ) {
 	bool failed = false;
+	char const *prefix = NULL;
 
 	int argi = 1;
 	if(argi == argc) {
@@ -961,6 +963,9 @@ main(
 #endif//def EVAL_TRACE
 			case 12:
 				setfile = argv[argi];
+				break;
+			case 13:
+				prefix = argv[argi];
 				break;
 			default:
 				errorf("invalid option: %s", args);
@@ -1216,6 +1221,23 @@ main(
 				);
 			}
 			fprintf(out, "};\n");
+		}
+		if(prefix) {
+			fprintf(out, "\n");
+			for(size_t i = 0; i < N_SYMBOLS; i++) {
+				if(symtab[i].ref == 0) {
+					continue;
+				}
+				SYMBOL *sp = &symtab[i].sym;
+				if((sp->type != ':') && (sp->type != '=')) {
+					continue;
+				}
+				fprintf(out, "#define %s_%.*s %llu\n",
+					prefix,
+					(int)sp->sym.len, (char const *)sp->sym.str,
+					sp->val.u
+				);
+			}
 		}
 		fprintf(out, "\n#endif//ndef %.*s__included\n", setnamelen, setname);
 	}
