@@ -1,6 +1,6 @@
 # msa
 
-## Version 1.2.1
+## Version 1.2.2
 
 ## Command Line
 
@@ -15,6 +15,7 @@ options:
   -o, --output FILE      output to FILE
   -l, --listing FILE     write listing to FILE
   -s, --set-header FILE  write header FILE for sets
+  -y, --symbols PFIX     include non-set symbols, adding prefix PFIX, in set header
 ```
 
 ## Description
