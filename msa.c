@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  1.2.2
+#	define VERSION  1.3.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -155,6 +155,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("`{` _identifier_ `#` _replacement_ `}`");
 	puts("\tdefines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.");
+	puts("\t**set**s maintain independant enumeration values for identifier value assignment.");
 	puts("\t**set** member data can be exported to a C header file via the `-s` command line option:");
 	puts("\t\tfor each **set** member as a `#define` _set-identifier_`_`_member-identifier_ _member-value_");
 	puts("\t\tand an array _set-identifier_`_name` of _member-identifier_ strings.");
@@ -603,6 +604,7 @@ static char const *process_directive(char const *cs) {
 			rpl.str = cs;
 			rpl.len = n = strcspn(cs, "}");
 			cs += n;
+			val = (VALUE){ .type = 0, .p = NULL };
 			if(!symbol_intern(N_SETS, settab, type, sym, rpl, val)) {
 				report_source_error("too many sets");
 			}
@@ -624,27 +626,46 @@ static char const *process_directive(char const *cs) {
 				cs += n + 1;
 				val = strtoval(cs, &s);
 				n = strcspn(cs = s, "}");
+			} else if(set) {
+				val = VALUE(u, set->val.type);
 			} else {
 				val = VALUE(u, next_val);
 			}
 			cs += n;
 			switch(val.type) {
 			default : break;
-			case 'u': next_val = val.u + 1; break;
+			case 'u':
+				if(set) {
+					set->val.type = val.u + 1;
+				} else {
+					next_val = val.u + 1;
+				}
+				break;
 			}
 			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, sym, rpl, val);
 			if(!sp) {
 				report_source_error("too many symbols");
 			} else if(set) {
-				n = set->val.type >> 8;
-				void *p = realloc((void *)set->val.p, (n + 1) * sizeof(set));
-				if(!p) {
+				VALUE *valp = (void *)set->val.p;
+				if(!valp) {
+					valp = malloc(sizeof(*valp));
+					if(!valp) {
+						perror("");
+						abort();
+					}
+					valp->type = 0;
+					valp->p = NULL;
+					set->val.p = valp;
+				}
+				n = valp->type;
+				SYMBOL **spp = realloc((void *)valp->p, (n + 1) * sizeof(sp));
+				if(!spp) {
 					perror("");
 					abort();
 				}
-				set->val.p = p;
-				((SYMBOL **)set->val.p)[n] = sp;
-				set->val.type += (1 << 8);
+				spp[n] = sp;
+				valp->p = spp;
+				valp->type = n + 1;
 			}
 		}
 	}
@@ -1002,7 +1023,7 @@ main(
 	char const *(*process)(char const *) = define_instruction;
 	DEFER(char const *src = loadsourcefiles(argc - argi, &argv[argi]),
 		!(failed = !src) || qerror(infile),
-		0
+		(void)0
 	) for(char const *cs = src;;) {
 		int c = *(cs = skipspace(cs));
 		if(c == ';') {
@@ -1200,25 +1221,28 @@ main(
 				continue;
 			}
 			fprintf(out, "\n");
-			SYMBOL *sp, **spp, **end;
-			SYMBOL *set = &settab[i].sym;
-			size_t  n   = set->val.type >> 8;
-			for(spp = (SYMBOL **)set->val.p, end = spp + n; spp < end; ) {
-				sp = *spp++;
-				fprintf(out, "#define %.*s_%.*s %llu\n",
-					(int)set->sym.len, (char const *)set->sym.str,
-					(int)sp->sym.len, (char const *)sp->sym.str,
-					sp->val.u
+			SYMBOL const *set = &settab[i].sym;
+			VALUE  const *valp = set->val.p;
+			if(valp) {
+				SYMBOL *sp, **spp, **end;
+				size_t n = valp->type;
+				for(spp = (SYMBOL **)valp->p, end = spp + n; spp < end; ) {
+					sp = *spp++;
+					fprintf(out, "#define %.*s_%.*s %llu\n",
+						(int)set->sym.len, (char const *)set->sym.str,
+						(int)sp->sym.len, (char const *)sp->sym.str,
+						sp->val.u
+					);
+				}
+				fprintf(out, "\nstatic char const *%.*s_name[] = {\n",
+					(int)set->sym.len, (char const *)set->sym.str
 				);
-			}
-			fprintf(out, "\nstatic char const *%.*s_name[] = {\n",
-				(int)set->sym.len, (char const *)set->sym.str
-			);
-			for(spp = (SYMBOL **)set->val.p, end = spp + n; spp < end; ) {
-				sp = *spp++;
-				fprintf(out, "\t[%llu] = \"%.*s\",\n",
-					sp->val.u, (int)sp->sym.len, (char const *)sp->sym.str
-				);
+				for(spp = (SYMBOL **)valp->p, end = spp + n; spp < end; ) {
+					sp = *spp++;
+					fprintf(out, "\t[%llu] = \"%.*s\",\n",
+						sp->val.u, (int)sp->sym.len, (char const *)sp->sym.str
+					);
+				}
 			}
 			fprintf(out, "};\n");
 		}

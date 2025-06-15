@@ -1,6 +1,6 @@
 # msa
 
-## Version 1.2.2
+## Version 1.3.0
 
 ## Command Line
 
@@ -91,6 +91,7 @@ Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a
 
 `{` _identifier_ `#` _replacement_ `}`
 	defines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.
+	**set**s maintain independant enumeration values for identifier value assignment.
 	**set** member data can be exported to a C header file via the `-s` command line option:
 		for each **set** member as a `#define` _set-identifier_`_`_member-identifier_ _member-value_
 		and an array _set-identifier_`_name` of _member-identifier_ strings.
