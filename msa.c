@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  1.4.0
+#	define VERSION  1.4.1
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -1257,7 +1257,7 @@ main(
 				if((sp->type != ':') && (sp->type != '=')) {
 					continue;
 				}
-				fprintf(out, "#define %s_%.*s %llu\n",
+				fprintf(out, "#define %s%.*s %llu\n",
 					prefix,
 					(int)sp->sym.len, (char const *)sp->sym.str,
 					sp->val.u
