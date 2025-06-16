@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  1.3.0
+#	define VERSION  1.4.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -617,6 +617,7 @@ static char const *process_directive(char const *cs) {
 				rpl.len = n = strcspn(cs, "=}");
 				set = symbol_lookup(N_SETS, settab, rpl);
 				if(set) {
+					type = ';';
 					rpl = set->rpl;
 				}
 			} else {
@@ -791,7 +792,7 @@ static char const *compile_instruction(char const *cs) {
 				xref[n_xref++] = env.v[i];
 				xr->type += 1 << 8;
 				break;
-			case ':':
+			case ':': case ';':
 				i = nv++;
 				env.v[i] = sp->val;
 				if(xr) {
