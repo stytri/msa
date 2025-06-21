@@ -37,6 +37,7 @@ typedef struct eval {
 	void     (*print)(char const *, ...);
 	uint64_t (*emit)(struct eval *e, uint64_t a, uint64_t v);
 	uint64_t (*func)(struct eval *e, uint8_t  a);
+	uint64_t (*tag) (bool, uint64_t);
 	VALUE      v[N_EVAL_VARIANTS];
 }
 	EVAL;
@@ -102,6 +103,9 @@ static uint64_t eval_nul_func(EVAL *, uint8_t, uint64_t v) {
 	ENUM(INCREMENT, "++") \
 \
 	ENUM(EMIT, "@=") \
+\
+	ENUM(TAG_AND, "$&") \
+	ENUM(TAG_SET, "$=") \
 \
 	ENUM(ERROR_TOO_LONG,    "expression too long") \
 	ENUM(ERROR_CHARACTER,   "invalid character in expression") \
@@ -440,6 +444,9 @@ static STRING eval_tokenize(
 				((uint8_t *)t.str)[t.len++] = EVAL_VARIANT;
 				((uint8_t *)t.str)[t.len++] = c;
 				continue;
+			} else switch(c) {
+			case '&': ((uint8_t *)t.str)[t.len++] = EVAL_TAG_AND; continue;
+			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_TAG_SET; continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
 			continue;
@@ -591,7 +598,6 @@ static STRING eval_tokenize(
 //------------------------------------------------------------------------------
 
 static uint64_t eval_sequence(uint8_t const *cs, EVAL *e, uint8_t const **csp);
-static uint64_t eval_condition(uint8_t const *cs, EVAL *e, uint8_t const **csp);
 
 static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	uint64_t l = 0, x = 0;
@@ -725,6 +731,8 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	}
 }
 
+static uint64_t eval_assignment(uint8_t const *cs, EVAL *e, uint8_t const **csp);
+
 static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	uint64_t l = 0;
 	int o = *cs;
@@ -753,6 +761,16 @@ static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	case EVAL_ARITHMETIC_PLUS:
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_unary(cs + 1, e, csp);
+		return l;
+	case EVAL_TAG_AND:
+		EVAL_TOKENPRINT(cs, e);
+		l = eval_unary(cs + 1, e, csp);
+		l = e ? e->tag(false, l) : 0;
+		return l;
+	case EVAL_TAG_SET:
+		EVAL_TOKENPRINT(cs, e);
+		l = eval_assignment(cs + 1, e, csp);
+		l = e ? e->tag(true, l) : 0;
 		return l;
 	default:
 		l = eval_primary(cs, e, csp);

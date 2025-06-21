@@ -1,6 +1,6 @@
 # msa
 
-## Version 2.0.0
+## Version 2.1.0
 
 ## Command Line
 
@@ -233,6 +233,12 @@ _left_ `<>>` _right_
 
 ##### unary prefix
 
+`$&` _value_
+	evaluates _value_ expression and returns the bitwise and with a global _tag_ value.
+
+`$=` _value_
+	evaluates _value_ expression and assigns to a global _tag_ value.
+
 `?` _value_
 	evaluates _value_ expression and returns '1' if the result is non-zero, `0` otherwise.
 
@@ -283,9 +289,9 @@ Source lines are parsed, spaces are elided, symbols and constants are replaced b
 
 ## symfile
 
-With version 2.0.0 `symfile.h` is introduced as a method of passing symbol information to programs compiled with **msa**; this header should be copied/moved to a common include directory.
+With version 2.0.0 `symfile.h` was introduced as a method of passing symbol information to programs compiled with **msa**; this header should be copied/moved to a common include directory.
 
-The current version of symfile (0) only supports symbol name and address, although provision is made for adding more information.
+The current version of symfile (0) only supports symbol name, information (lower 32 bits of the global _tag_), and address, although provision is made for adding more data.
 
 ## Building
 

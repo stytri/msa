@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  2.0.0
+#	define VERSION  2.1.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -296,6 +296,12 @@ static void readme(char *arg0) {
 	puts("");
 	puts("##### unary prefix");
 	puts("");
+	puts("`$&` _value_");
+	puts("\tevaluates _value_ expression and returns the bitwise and with a global _tag_ value.");
+	puts("");
+	puts("`$=` _value_");
+	puts("\tevaluates _value_ expression and assigns to a global _tag_ value.");
+	puts("");
 	puts("`?` _value_");
 	puts("\tevaluates _value_ expression and returns '1' if the result is non-zero, `0` otherwise.");
 	puts("");
@@ -346,9 +352,9 @@ static void readme(char *arg0) {
 	puts("");
 	puts("## symfile");
 	puts("");
-	puts("With version 2.0.0 `symfile.h` is introduced as a method of passing symbol information to programs compiled with **msa**; this header should be copied/moved to a common include directory.");
+	puts("With version 2.0.0 `symfile.h` was introduced as a method of passing symbol information to programs compiled with **msa**; this header should be copied/moved to a common include directory.");
 	puts("");
-	puts("The current version of symfile (0) only supports symbol name and address, although provision is made for adding more information.");
+	puts("The current version of symfile (0) only supports symbol name, information (lower 32 bits of the global _tag_), and address, although provision is made for adding more data.");
 	puts("");
 	puts("## Building");
 	puts("");
@@ -544,11 +550,17 @@ static int getconst(size_t n, char const s[], uint64_t *p) {
 	return -1;
 }
 
+static uint64_t tag(bool set, uint64_t u) {
+	static uint64_t v = 0;
+	return set ? (v = u) : (v & u);
+}
+
 static EVAL env = {
 	.trace = trace,
 	.print = report_source_error,
 	.emit  = emit8,
 	.func  = callfunc,
+	.tag   = tag,
 };
 
 static int set_byte_bits(int n) {
@@ -601,7 +613,7 @@ static char const *process_directive(char const *cs) {
 		rpl = compile_expression(&cs);
 		n   = strcspn(cs, "}");
 		cs += n;
-		if(!symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', sym, rpl, val)) {
+		if(!symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', 0, sym, rpl, val)) {
 			report_source_error("too many functions");
 		}
 	} else {
@@ -613,7 +625,7 @@ static char const *process_directive(char const *cs) {
 			rpl.len = n = strcspn(cs, "}");
 			cs += n;
 			val = (VALUE){ .type = 0, .p = NULL };
-			if(!symbol_intern(N_SETS, settab, type, sym, rpl, val)) {
+			if(!symbol_intern(N_SETS, settab, type, 0, sym, rpl, val)) {
 				report_source_error("too many sets");
 			}
 		} else {
@@ -651,7 +663,7 @@ static char const *process_directive(char const *cs) {
 				}
 				break;
 			}
-			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, sym, rpl, val);
+			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, 0, sym, rpl, val);
 			if(!sp) {
 				report_source_error("too many symbols");
 			} else if(set) {
@@ -725,7 +737,7 @@ static char const *define_instruction(char const *cs) {
 		}
 	}
 	VALUE val = VALUE(p, ltx.str);
-	if(!symbol_intern(N_INSTRUCTIONS, instab, '$', sym, rpl, val)) {
+	if(!symbol_intern(N_INSTRUCTIONS, instab, '$', 0, sym, rpl, val)) {
 		report_source_error("too many instructions");
 	}
 	return cs;
@@ -767,7 +779,7 @@ static char const *compile_instruction(char const *cs) {
 				c = *++cs;
 			} while((c == '_') || (c == '$') || isalnum(c))
 				;
-			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, '@', STRING(cs - ct, ct), rpladdr, VALUE(u, 0));
+			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, '@', tag(false, -1), STRING(cs - ct, ct), rpladdr, VALUE(u, 0));
 			if(!sp) {
 				report_source_error("too many symbols");
 				return NULL;
@@ -1330,7 +1342,7 @@ main(
 		for(size_t i = 0; i < n_symbols; i++) {
 			SYMBOL const *sp = spp[i];
 			symfile_append(ri, &rix, sfp, &sfx, names, &nsx,
-				sp->sym.len, sp->sym.str, '@', sp->val.u
+				sp->sym.len, sp->sym.str, sp->tag & UINT32_C(0xFFFFFFFF), sp->val.u
 			);
 		}
 		uint64_t data = 0;

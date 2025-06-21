@@ -34,10 +34,11 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 
 typedef struct {
-	int    type;
-	STRING sym;
-	STRING rpl;
-	VALUE  val;
+	int      type;
+	uint64_t tag;
+	STRING   sym;
+	STRING   rpl;
+	VALUE    val;
 }
 	SYMBOL;
 
@@ -76,13 +77,14 @@ static SYMBOL *symbol_lookup(size_t n_symbols, SYMTAB *tab, STRING sym) {
 	return (s && (s->ref != 0)) ? &s->sym : NULL;
 }
 
-static SYMBOL *symbol_intern(size_t n_symbols, SYMTAB *tab, int type, STRING sym, STRING rpl, VALUE val) {
+static SYMBOL *symbol_intern(size_t n_symbols, SYMTAB *tab, int type, uint64_t tag, STRING sym, STRING rpl, VALUE val) {
 	uint64_t h = hash(sym.str, sym.len);
 	SYMTAB  *s = symbol_entry(n_symbols, tab, sym, h);
 	if(s) {
 		if(s->ref == 0) {
 			s->h        = h;
 			s->sym.type = type;
+			s->sym.tag  = tag;
 			s->sym.sym  = sym;
 			s->sym.rpl  = rpl;
 			s->sym.val  = val;
