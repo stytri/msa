@@ -1,6 +1,6 @@
 # msa
 
-## Version 1.4.1
+## Version 2.0.0
 
 ## Command Line
 
@@ -16,6 +16,7 @@ options:
   -l, --listing FILE     write listing to FILE
   -s, --set-header FILE  write header FILE for sets
   -y, --symbols PFIX     include non-set symbols, adding prefix PFIX, in set header
+  -a, --symfile FILE     write (addressable) symbol information to FILE
 ```
 
 ## Description
@@ -279,6 +280,12 @@ The following characters have special meaning in assembler files: `#` `;` `,`.
 `#` and `;` are as above, and `,` is used to separate multiple instructions on a single line.
 
 Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` separator, comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.
+
+## symfile
+
+With version 2.0.0 `symfile.h` is introduced as a method of passing symbol information to programs compiled with **msa**; this header should be copied/moved to a common include directory.
+
+The current version of symfile (0) only supports symbol name and address, although provision is made for adding more information.
 
 ## Building
 

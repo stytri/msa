@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  1.4.1
+#	define VERSION  2.0.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -344,6 +344,12 @@ static void readme(char *arg0) {
 	puts("");
 	puts("Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` separator, comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.");
 	puts("");
+	puts("## symfile");
+	puts("");
+	puts("With version 2.0.0 `symfile.h` is introduced as a method of passing symbol information to programs compiled with **msa**; this header should be copied/moved to a common include directory.");
+	puts("");
+	puts("The current version of symfile (0) only supports symbol name and address, although provision is made for adding more information.");
+	puts("");
 	puts("## Building");
 	puts("");
 	puts("Uses [HOL](https://github.com/stytri/hol) and [defer](https://github.com/stytri/defer).");
@@ -356,6 +362,7 @@ static void readme(char *arg0) {
 
 #include <hol/holibc.h>  // https://github.com/stytri/hol
 #include <defer.h>       // https://github.com/stytri/defer
+#include <symfile.h>
 #include "config.h"
 #include "symbol.h"
 #include "string.h"
@@ -365,6 +372,7 @@ static void readme(char *arg0) {
 
 //------------------------------------------------------------------------------
 
+static char const *symfile    = "";
 static char const *setfile    = "";
 static char const *outfile    = "";
 static char const *infile     = "";
@@ -892,6 +900,20 @@ static bool source_file_is_msa(char const *infile, size_t n) {
 	return false;
 }
 
+static int cmpsymbols(void const *lp, void const *rp) {
+	SYMBOL const *ls = *(SYMBOL const **)lp;
+	SYMBOL const *rs = *(SYMBOL const **)rp;
+	size_t const  ln = ls->sym.len;
+	size_t const  rn = rs->sym.len;
+	size_t const  n  = (ln < rn) ? ln : rn;
+	int    const  r  = strncmp(ls->sym.str, rs->sym.str, n);
+	if(r == 0) {
+		if(ln < rn) return -1;
+		if(ln > rn) return +1;
+	}
+	return r;
+}
+
 //------------------------------------------------------------------------------
 
 #ifdef __MINGW64__
@@ -913,6 +935,7 @@ static struct optget options[] = {
 #endif//def EVAL_TRACE
 	{ 12, "-s, --set-header FILE",   "write header FILE for sets" },
 	{ 13, "-y, --symbols PFIX",      "include non-set symbols, adding prefix PFIX, in set header" },
+	{ 14, "-a, --symfile FILE",      "write (addressable) symbol information to FILE" },
 };
 static size_t const n_options = (sizeof(options) / sizeof(options[0]));
 
@@ -988,6 +1011,9 @@ main(
 				break;
 			case 13:
 				prefix = argv[argi];
+				break;
+			case 14:
+				symfile = argv[argi];
 				break;
 			default:
 				errorf("invalid option: %s", args);
@@ -1265,6 +1291,52 @@ main(
 			}
 		}
 		fprintf(out, "\n#endif//ndef %.*s__included\n", setnamelen, setname);
+	}
+
+	if(!failed && *symfile) DEFER(FILE *out = fopen(symfile, "wb"),
+		!(failed = !out) || qerror(setfile),
+		fclose(out)
+	) {
+		size_t n_symbols = 0;
+		size_t names_len = 2;
+		for(size_t i = 0; i < N_SYMBOLS; i++) {
+			SYMBOL const *sp = &symtab[i].sym;
+			if((symtab[i].ref == 0) || (sp->type != '@')) {
+				continue;
+			}
+			names_len += sp->sym.len + 1;
+			n_symbols++;
+		}
+		uint8_t         hd[16]; memset(hd, 0, sizeof(hd));
+		uint32_t        ri[64]; memset(ri, 0, sizeof(ri));
+		symfile_symbol *sfp   = calloc(n_symbols, sizeof(*sfp));
+		SYMBOL const  **spp   = calloc(n_symbols, sizeof(*spp));
+		char           *names = calloc(names_len, 1);
+		if(!sfp || !spp || !names) {
+			perror();
+			break;
+		}
+		for(size_t j = 0, i = 0; i < N_SYMBOLS; i++) {
+			SYMBOL const *sp = &symtab[i].sym;
+			if((symtab[i].ref == 0) || (sp->type != '@')) {
+				continue;
+			}
+			spp[j++] = sp;
+		}
+		qsort(spp, n_symbols, sizeof(*spp), cmpsymbols);
+		int      rix = 0;
+		uint32_t sfx = 0;
+		uint32_t nsx = 1;
+		for(size_t i = 0; i < n_symbols; i++) {
+			SYMBOL const *sp = spp[i];
+			symfile_append(ri, &rix, sfp, &sfx, names, &nsx,
+				sp->sym.len, sp->sym.str, '@', sp->val.u
+			);
+		}
+		uint64_t data = 0;
+		if(symfile_write(hd, ri, n_symbols, sfp, names_len, names, sizeof(data), &data, out) != 0) {
+			perror(symfile);
+		}
 	}
 
 	return failed ? EXIT_FAILURE : EXIT_SUCCESS;
