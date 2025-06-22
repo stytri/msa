@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  2.1.0
+#	define VERSION  2.2.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -403,13 +403,17 @@ static void report_address_out_of_range(uint64_t a) {
 }
 
 static FILE *listout = NULL;
+static int   listlen = 0;
 
 static inline void listing(char const *fmt, ...) {
 	if(listout) {
 		va_list val;
 		va_start(val, fmt);
 
-		vfprintf(listout, fmt, val);
+		int n = vfprintf(listout, fmt, val);
+		if(n > 0) {
+			listlen += n;
+		}
 
 		va_end(val);
 	}
@@ -768,11 +772,13 @@ static char const *compile_instruction(char const *cs) {
 	size_t   o_xref = n_xref;
 	size_t   i;
 	char    *s;
+	char const *cy = NULL;
 	for(int c; (c = *cs) && (c != '\n');) {
 		if(!isgraph(c)) {
 			cs++;
 			continue;
 		}
+		cy = cy ? cy : cs;
 		if((c == '_') || (c == '$') || isalpha(c)) {
 			char const *ct = cs;
 			do {
@@ -878,9 +884,20 @@ static char const *compile_instruction(char const *cs) {
 		if(!sp) {
 			report_source_error("invalid instruction: %.*s", (int)(t - buf), buf);
 		} else {
+			int n = cs - cy;
+			while((n > 0) && !isgraph(cy[n-1])) {
+				n--;
+			}
+			listlen = 0;
 			listing("%6"PRIu64":  ", env.v[0].u);
 			uint64_t l = eval_expression(sp->rpl.str, &env);
-			listing("  ; %.*s\n", (int)sp->sym.len, sp->sym.str);
+			for(listlen = (listlen < 40) ? 40 - listlen : 0; listlen > 8; listlen -= 8) {
+				fputs("        ", listout);
+			}
+			if(listlen > 0) {
+				fputs("        " + (8 - listlen), listout);
+			}
+			listing("  ; %.*s  ;; %.*s\n", n, cy, (int)sp->sym.len, sp->sym.str);
 			if(xr) {
 				if(l) {
 					xr->p = sp->val.p;
@@ -1054,6 +1071,7 @@ main(
 		env.v[i] = VALUE(u, 0);
 	}
 
+	listlen = 0;
 	listing("\n; LISTING\n; =======\n\n");
 
 	lineno = 1;
@@ -1214,6 +1232,7 @@ main(
 	}
 
 	if(!failed && (n_xref > 0)) {
+		listlen = 0;
 		listing("\n; PATCHES\n; =======\n\n");
 		for(size_t i = 0; i < n_xref; ) {
 			size_t  const  n = xref[i].type >> 8;
@@ -1223,6 +1242,7 @@ main(
 				env.v[j++] = xref[i++];
 			}
 			if(l) {
+				listlen = 0;
 				listing("%6"PRIu64":  ", env.v[0].u);
 				eval_expression(l, &env);
 				listing("\n");
@@ -1230,6 +1250,7 @@ main(
 		}
 	}
 	if(!failed) {
+		listlen = 0;
 		listing("\n; SIZE = %zu\n\n", maxaddr + 1);
 	}
 	if(listout && (listout != stdout)) {
