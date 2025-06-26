@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  2.2.0
+#	define VERSION  2.2.1
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -132,7 +132,7 @@ static void readme(char *arg0) {
 	puts("\tdefault is `%i`");
 	puts("");
 	puts("`$MEMORY=` _size_");
-	puts("\twhere _size_ is the size of memory in **byte**s; ISO/IEC suffixes are recognised - e.g. `Ki` for units of 1024 **byte**s.");
+	puts("\twhere _size_ is the size of memory in **byte**s; ISO/IEC suffixes are recognised (e.g. `Ki`) for units of 1024 **byte**s, as well as the vernacular `b` suffix (e.g. `KB`).");
 	puts("\tthis directive _must_ be present _before_ assembler instructions are processed.");
 	puts("");
 	puts("`$NOCASE`");
