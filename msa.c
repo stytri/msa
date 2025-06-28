@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  2.2.1
+#	define VERSION  3.0.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -350,6 +350,12 @@ static void readme(char *arg0) {
 	puts("");
 	puts("Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` separator, comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.");
 	puts("");
+	puts("## segfile");
+	puts("");
+	puts("With version 3.0.0 `segfile.h` was introduced as a method writing and reading a file as a sequence of segments; this header should be copied/moved to a common include directory.");
+	puts("");
+	puts("When enabled via the command line, segments are created automatically by **msa**; they have no attributes other than addresss and length.");
+	puts("");
 	puts("## symfile");
 	puts("");
 	puts("With version 2.0.0 `symfile.h` was introduced as a method of passing symbol information to programs compiled with **msa**; this header should be copied/moved to a common include directory.");
@@ -370,6 +376,7 @@ static void readme(char *arg0) {
 #include <defer.h>       // https://github.com/stytri/defer
 #include <symfile.h>
 #include "config.h"
+#include "segment.h"
 #include "symbol.h"
 #include "string.h"
 #include "value.h"
@@ -456,6 +463,9 @@ static size_t sizeof_memory = 0;
 static void  *memory        = NULL;
 static size_t maxaddr       = 0;
 
+static bool    segments     = false;
+static SEGLIST seglist      = {};
+
 static STRING rpladdr       = STRING(2, "%a");
 static STRING rplint        = STRING(2, "%i");
 
@@ -473,6 +483,14 @@ static uint64_t emit8(struct eval *e, uint64_t a, uint64_t v) {
 	listing(format[byte_format], v & UINT64_C(0xff));
 	if(a > maxaddr) {
 		maxaddr = a;
+	}
+	if(segments) {
+		uint8_t *m = segment_pointer(&seglist, sizeof(*m), a);
+		if(!m) {
+			perror("");
+			abort();
+		}
+		return *m = v;
 	}
 	return ((uint8_t *)memory)[a] = v;
 }
@@ -492,6 +510,14 @@ static uint64_t emit16(struct eval *e, uint64_t a, uint64_t v) {
 	if(a > maxaddr) {
 		maxaddr = a;
 	}
+	if(segments) {
+		uint16_t *m = segment_pointer(&seglist, sizeof(*m), a);
+		if(!m) {
+			perror("");
+			abort();
+		}
+		return *m = v;
+	}
 	return ((uint16_t *)memory)[a] = v;
 }
 
@@ -510,6 +536,14 @@ static uint64_t emit32(struct eval *e, uint64_t a, uint64_t v) {
 	if(a > maxaddr) {
 		maxaddr = a;
 	}
+	if(segments) {
+		uint32_t *m = segment_pointer(&seglist, sizeof(*m), a);
+		if(!m) {
+			perror("");
+			abort();
+		}
+		return *m = v;
+	}
 	return ((uint32_t *)memory)[a] = v;
 }
 
@@ -527,6 +561,14 @@ static uint64_t emit64(struct eval *e, uint64_t a, uint64_t v) {
 	listing(format[byte_format], v);
 	if(a > maxaddr) {
 		maxaddr = a;
+	}
+	if(segments) {
+		uint64_t *m = segment_pointer(&seglist, sizeof(*m), a);
+		if(!m) {
+			perror("");
+			abort();
+		}
+		return *m = v;
 	}
 	return ((uint64_t *)memory)[a] = v;
 }
@@ -965,6 +1007,7 @@ static struct optget options[] = {
 	{ 12, "-s, --set-header FILE",   "write header FILE for sets" },
 	{ 13, "-y, --symbols PFIX",      "include non-set symbols, adding prefix PFIX, in set header" },
 	{ 14, "-a, --symfile FILE",      "write (addressable) symbol information to FILE" },
+	{ 15, "-g, --segments SIZE",     "enable segmented memory - segments are allocated in blocks of SIZE bytes." },
 };
 static size_t const n_options = (sizeof(options) / sizeof(options[0]));
 
@@ -1043,6 +1086,10 @@ main(
 				break;
 			case 14:
 				symfile = argv[argi];
+				break;
+			case 15:
+				seglist.granularity = strtozs(argv[argi], NULL, 0);
+				segments = true;
 				break;
 			default:
 				errorf("invalid option: %s", args);
@@ -1190,11 +1237,14 @@ main(
 					if(*cs == '}') {
 						if(memory) {
 							free(memory);
+							memory = NULL;
 						}
-						memory = calloc(sizeof_memory, sizeof_byte);
-						if(!memory) {
-							perror();
-							abort();
+						if(!segments) {
+							memory = calloc(sizeof_memory, sizeof_byte);
+							if(!memory) {
+								perror();
+								abort();
+							}
 						}
 						cs++;
 						continue;
@@ -1261,8 +1311,16 @@ main(
 		!(failed = !out) || qerror(outfile),
 		fclose(out)
 	) {
-		size_t z = fwrite(memory, sizeof_byte, maxaddr, out);
-		if(z != maxaddr) {
+		if(segments) {
+			if(segfile_write(&seglist, sizeof_byte, sizeof_memory, out) != 0) {
+				failed = true;
+				perror(outfile);
+				break;
+			}
+			continue;
+		}
+		size_t z = fwrite(memory, sizeof_byte, maxaddr + 1, out);
+		if(z != (maxaddr + 1)) {
 			perror(outfile);
 		}
 	}

@@ -1,6 +1,6 @@
 # msa
 
-## Version 2.2.1
+## Version 3.0.0
 
 ## Command Line
 
@@ -17,6 +17,7 @@ options:
   -s, --set-header FILE  write header FILE for sets
   -y, --symbols PFIX     include non-set symbols, adding prefix PFIX, in set header
   -a, --symfile FILE     write (addressable) symbol information to FILE
+  -g, --segments SIZE    enable segmented memory - segments are allocated in blocks of SIZE bytes.
 ```
 
 ## Description
@@ -286,6 +287,12 @@ The following characters have special meaning in assembler files: `#` `;` `,`.
 `#` and `;` are as above, and `,` is used to separate multiple instructions on a single line.
 
 Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` separator, comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.
+
+## segfile
+
+With version 3.0.0 `segfile.h` was introduced as a method writing and reading a file as a sequence of segments; this header should be copied/moved to a common include directory.
+
+When enabled via the command line, segments are created automatically by **msa**; they have no attributes other than addresss and length.
 
 ## symfile
 

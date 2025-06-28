@@ -53,11 +53,14 @@ SOFTWARE.
 // :+      -fno-unwind-tables -fno-asynchronous-unwind-tables
 // :+      -Wl,--gc-sections -s
 //
+// ::windir?WINFLAGS
+// :+      -D__USE_MINGW_ANSI_STDIO=1
+//
 // ::CSTD!CSTD
 // :+      -std=c23
 //
-// ::windir?WINFLAGS
-// :+      -D__USE_MINGW_ANSI_STDIO=1
+// ::INCLUDE!INCLUDE
+// :+      -I ../../inc 
 //
 
 //------------------------------------------------------------------------------
@@ -68,6 +71,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
+#include <segfile.h>
 #include "debug.h"
 
 //------------------------------------------------------------------------------
@@ -310,10 +314,9 @@ int main(int argc, char **argv) {
 		perror(argv[argi]);
 		exit(EXIT_FAILURE);
 	}
-	fread(mem, sizeof(*mem), sizeof(mem)/sizeof(*mem), in);
-	bool failed = ferror(in);
+	int err = segfile_read(mem, sizeof(*mem), sizeof(mem)/sizeof(*mem), in);
 	fclose(in);
-	if(failed) {
+	if(err) {
 		perror(argv[argi]);
 		exit(EXIT_FAILURE);
 	}

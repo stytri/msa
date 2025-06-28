@@ -122,7 +122,7 @@ static int symfile_write(
 ) {
 	int err = 0;
 	if((err == 0) && (fwrite("SYM", 1         ,  4, fp) !=  4)) err = errno;
-	if((err == 0) && (fwrite(hd , sizeof(*hd ), 16, fp) != 12)) err = errno;
+	if((err == 0) && (fwrite(hd , sizeof(*hd ), 16, fp) != 16)) err = errno;
 	if((err == 0) && (fwrite(&sz, sizeof( sz ),  1, fp) !=  1)) err = errno;
 	if((err == 0) && (fwrite(&nz, sizeof( nz ),  1, fp) !=  1)) err = errno;
 	if((err == 0) && (fwrite(&dz, sizeof( dz ),  1, fp) !=  1)) err = errno;
@@ -154,7 +154,7 @@ static int symfile_read(
 	void           *ds = NULL;
 	if((err == 0) && (fread(mgc, sizeof(*mgc),  4, fp) !=  4)) err = errno;
 	if((err == 0) && (memcmp(mgc, "SYM"      ,  4)     !=  0)) err = EILSEQ;
-	if((err == 0) && (fread(hd , sizeof(*hd ), 16, fp) != 12)) err = errno;
+	if((err == 0) && (fread(hd , sizeof(*hd ), 16, fp) != 16)) err = errno;
 	if((err == 0) && (fread(&sz, sizeof( sz ),  1, fp) !=  1)) err = errno;
 	if((err == 0) && (fread(&nz, sizeof( nz ),  1, fp) !=  1)) err = errno;
 	if((err == 0) && (fread(&dz, sizeof( dz ),  1, fp) !=  1)) err = errno;
