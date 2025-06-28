@@ -94,7 +94,11 @@ static void *segment__create(SEGLIST *sl, size_t size, size_t addr) {
 	if(sl->head) {
 		if(sl->tail->end == sp->start) {
 			sl->tail->next = sp;
-			return segment__merge(sl, sl->tail, size, addr);
+			if(!(sl->flag & FIXED_SEGMENTS)) {
+				return segment__merge(sl, sl->tail, size, addr);
+			}
+			sl->tail = sp;
+			return segment__pointer((sl->current = sp), size, addr);
 		}
 		if(sl->tail->end < sp->start) {
 			sl->tail->next = sp;
@@ -109,18 +113,23 @@ static void *segment__create(SEGLIST *sl, size_t size, size_t addr) {
 		if(sp->end == sl->head->start) {
 			sp->next = sl->head;
 			sl->head = sp;
-			return segment__merge(sl, sp, size, addr);
+			if(!(sl->flag & FIXED_SEGMENTS)) {
+				return segment__merge(sl, sp, size, addr);
+			}
+			return segment__pointer((sl->current = sp), size, addr);
 		}
 		for(SEGMENT *curr = sl->head, *end = sl->tail; curr != end; curr = curr->next) {
 			if((addr >= curr->end) && (addr < curr->next->start)) {
 				sp->next = curr->next;
 				curr->next = sp;
-				if(curr->end == sp->start) {
-					segment__merge(sl, curr, size, addr);
-					sp = sl->current;
-				}
-				if(sp->end == sp->next->start) {
-					return segment__merge(sl, sp, size, addr);
+				if(!(sl->flag & FIXED_SEGMENTS)) {
+					if(curr->end == sp->start) {
+						segment__merge(sl, curr, size, addr);
+						sp = sl->current;
+					}
+					if(sp->end == sp->next->start) {
+						return segment__merge(sl, sp, size, addr);
+					}
 				}
 				return segment__pointer((sl->current = sp), size, addr);
 			}
@@ -142,11 +151,13 @@ static inline void *segment_pointer(SEGLIST *sl, size_t size, size_t addr) {
 					return segment__pointer(sp, size, addr);
 				}
 				next = sp->next;
-				if(addr == sp->end) {
-					if(next && (addr == next->start)) {
-						return segment__merge(sl, sp, size, addr);
+				if(!(sl->flag & FIXED_SEGMENTS)) {
+					if(addr == sp->end) {
+						if(next && (addr == next->start)) {
+							return segment__merge(sl, sp, size, addr);
+						}
+						return segment__expand(sl, sp, size, addr);
 					}
-					return segment__expand(sl, sp, size, addr);
 				}
 			}
 		} else do {
@@ -154,11 +165,13 @@ static inline void *segment_pointer(SEGLIST *sl, size_t size, size_t addr) {
 				return segment__pointer(sp, size, addr);
 			}
 			next = sp->next;
-			if(addr == sp->end) {
-				if(next && (addr == next->start)) {
-					return segment__merge(sl, sp, size, addr);
+			if(!(sl->flag & FIXED_SEGMENTS)) {
+				if(addr == sp->end) {
+					if(next && (addr == next->start)) {
+						return segment__merge(sl, sp, size, addr);
+					}
+					return segment__expand(sl, sp, size, addr);
 				}
-				return segment__expand(sl, sp, size, addr);
 			}
 		} while((sp = next) && (addr >= sp->start))
 			;

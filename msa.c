@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  3.0.0
+#	define VERSION  3.1.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -355,6 +355,8 @@ static void readme(char *arg0) {
 	puts("With version 3.0.0 `segfile.h` was introduced as a method writing and reading a file as a sequence of segments; this header should be copied/moved to a common include directory.");
 	puts("");
 	puts("When enabled via the command line, segments are created automatically by **msa**; they have no attributes other than addresss and length.");
+	puts("* with the `-g` command line option, segments are dynamically expanded and merged.");
+	puts("* with the `-G` command line option, segments have a fixed size.");
 	puts("");
 	puts("## symfile");
 	puts("");
@@ -1008,6 +1010,7 @@ static struct optget options[] = {
 	{ 13, "-y, --symbols PFIX",      "include non-set symbols, adding prefix PFIX, in set header" },
 	{ 14, "-a, --symfile FILE",      "write (addressable) symbol information to FILE" },
 	{ 15, "-g, --segments SIZE",     "enable segmented memory - segments are allocated in blocks of SIZE bytes." },
+	{ 16, "-G, --fixed-segments SIZE","as -g, but segments are of fixed SIZE" },
 };
 static size_t const n_options = (sizeof(options) / sizeof(options[0]));
 
@@ -1088,6 +1091,12 @@ main(
 				symfile = argv[argi];
 				break;
 			case 15:
+				seglist.flag &= ~FIXED_SEGMENTS;
+				seglist.granularity = strtozs(argv[argi], NULL, 0);
+				segments = true;
+				break;
+			case 16:
+				seglist.flag |= FIXED_SEGMENTS;
 				seglist.granularity = strtozs(argv[argi], NULL, 0);
 				segments = true;
 				break;

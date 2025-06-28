@@ -42,12 +42,15 @@ typedef struct segment {
 	SEGMENT;
 
 typedef struct {
+	unsigned flag;
 	size_t   granularity;
 	SEGMENT *current;
 	SEGMENT *head;
 	SEGMENT *tail;
 }
 	SEGLIST;
+
+#define FIXED_SEGMENTS 1
 
 //------------------------------------------------------------------------------
 

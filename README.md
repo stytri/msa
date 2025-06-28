@@ -1,6 +1,6 @@
 # msa
 
-## Version 3.0.0
+## Version 3.1.0
 
 ## Command Line
 
@@ -8,16 +8,17 @@
 Matching String Assembler: a simple assembler for virtual machines.
 usage: msa [OPTION]... [FILE]...
 options:
-  -h, --help             display this help and exit
-      --version          display version and exit
-      --license          display license and exit
-      --readme           display readme and exit
-  -o, --output FILE      output to FILE
-  -l, --listing FILE     write listing to FILE
-  -s, --set-header FILE  write header FILE for sets
-  -y, --symbols PFIX     include non-set symbols, adding prefix PFIX, in set header
-  -a, --symfile FILE     write (addressable) symbol information to FILE
-  -g, --segments SIZE    enable segmented memory - segments are allocated in blocks of SIZE bytes.
+  -h, --help                 display this help and exit
+      --version              display version and exit
+      --license              display license and exit
+      --readme               display readme and exit
+  -o, --output FILE          output to FILE
+  -l, --listing FILE         write listing to FILE
+  -s, --set-header FILE      write header FILE for sets
+  -y, --symbols PFIX         include non-set symbols, adding prefix PFIX, in set header
+  -a, --symfile FILE         write (addressable) symbol information to FILE
+  -g, --segments SIZE        enable segmented memory - segments are allocated in blocks of SIZE bytes.
+  -G, --fixed-segments SIZE  as -g, but segments are of fixed SIZE
 ```
 
 ## Description
@@ -293,6 +294,8 @@ Source lines are parsed, spaces are elided, symbols and constants are replaced b
 With version 3.0.0 `segfile.h` was introduced as a method writing and reading a file as a sequence of segments; this header should be copied/moved to a common include directory.
 
 When enabled via the command line, segments are created automatically by **msa**; they have no attributes other than addresss and length.
+* with the `-g` command line option, segments are dynamically expanded and merged.
+* with the `-G` command line option, segments have a fixed size.
 
 ## symfile
 
