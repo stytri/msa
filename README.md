@@ -235,6 +235,9 @@ _left_ `<>>` _right_
 
 ##### unary prefix
 
+`=@` _address_
+	evaluates _address_ expression and returns the byte from memory at the resulting _address_.
+
 `$&` _value_
 	evaluates _value_ expression and returns the bitwise and with a global _tag_ value.
 

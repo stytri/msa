@@ -296,6 +296,9 @@ static void readme(char *arg0) {
 	puts("");
 	puts("##### unary prefix");
 	puts("");
+	puts("`=@` _address_");
+	puts("\tevaluates _address_ expression and returns the byte from memory at the resulting _address_.");
+	puts("");
 	puts("`$&` _value_");
 	puts("\tevaluates _value_ expression and returns the bitwise and with a global _tag_ value.");
 	puts("");
@@ -575,6 +578,74 @@ static uint64_t emit64(struct eval *e, uint64_t a, uint64_t v) {
 	return ((uint64_t *)memory)[a] = v;
 }
 
+static uint64_t load8(struct eval *e, uint64_t a) {
+	(void)e;
+	if(a > sizeof_memory) {
+		report_address_out_of_range(a);
+		return 0;
+	}
+	if(segments) {
+		uint8_t *m = segment_pointer(&seglist, sizeof(*m), a);
+		if(!m) {
+			perror("");
+			abort();
+		}
+		return *m;
+	}
+	return ((uint8_t *)memory)[a];
+}
+
+static uint64_t load16(struct eval *e, uint64_t a) {
+	(void)e;
+	if(a > sizeof_memory) {
+		report_address_out_of_range(a);
+		return 0;
+	}
+	if(segments) {
+		uint16_t *m = segment_pointer(&seglist, sizeof(*m), a);
+		if(!m) {
+			perror("");
+			abort();
+		}
+		return *m;
+	}
+	return ((uint16_t *)memory)[a];
+}
+
+static uint64_t load32(struct eval *e, uint64_t a) {
+	(void)e;
+	if(a > sizeof_memory) {
+		report_address_out_of_range(a);
+		return 0;
+	}
+	if(segments) {
+		uint32_t *m = segment_pointer(&seglist, sizeof(*m), a);
+		if(!m) {
+			perror("");
+			abort();
+		}
+		return *m;
+	}
+	return ((uint32_t *)memory)[a];
+}
+
+static uint64_t load64(struct eval *e, uint64_t a) {
+	(void)e;
+	if(a > sizeof_memory) {
+		report_address_out_of_range(a);
+		return 0;
+	}
+	if(segments) {
+		uint64_t *m = segment_pointer(&seglist, sizeof(*m), a);
+		if(!m) {
+			perror("");
+			abort();
+		}
+		return *m;
+	}
+	return ((uint64_t *)memory)[a];
+}
+
 static uint64_t callfunc(EVAL *e, uint8_t a) {
 	SYMBOL *sp = &funtab[a].sym;
 	return eval_expression(sp->rpl.str, e);
@@ -607,6 +678,7 @@ static EVAL env = {
 	.trace = trace,
 	.print = report_source_error,
 	.emit  = emit8,
+	.load  = load8,
 	.func  = callfunc,
 	.tag   = tag,
 };
@@ -617,6 +689,7 @@ static int set_byte_bits(int n) {
 		byte_bits   = Byte_Bits; \
 		sizeof_byte = sizeof(uint##Byte_Bits##_t); \
 		env.emit    = emit##Byte_Bits; \
+		env.load    = load##Byte_Bits; \
 		return 1;
 	switch(n) {
 	SET_BYTE_BITS(8)

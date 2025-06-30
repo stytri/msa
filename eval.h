@@ -36,6 +36,7 @@ typedef struct eval {
 	void     (*trace)(char const *, ...);
 	void     (*print)(char const *, ...);
 	uint64_t (*emit)(struct eval *e, uint64_t a, uint64_t v);
+	uint64_t (*load)(struct eval *e, uint64_t a);
 	uint64_t (*func)(struct eval *e, uint8_t  a);
 	uint64_t (*tag) (bool, uint64_t);
 	VALUE      v[N_EVAL_VARIANTS];
@@ -54,8 +55,8 @@ static uint64_t eval_nul_emit(EVAL *, uint64_t, uint64_t v) {
 	return v;
 }
 
-static uint64_t eval_nul_link(EVAL *, uint64_t, uint64_t v) {
-	return v;
+static uint64_t eval_nul_load(EVAL *, uint64_t) {
+	return 0;
 }
 
 static uint64_t eval_nul_func(EVAL *, uint8_t, uint64_t v) {
@@ -103,6 +104,7 @@ static uint64_t eval_nul_func(EVAL *, uint8_t, uint64_t v) {
 	ENUM(INCREMENT, "++") \
 \
 	ENUM(EMIT, "@=") \
+	ENUM(LOAD, "=@") \
 \
 	ENUM(TAG_AND, "$&") \
 	ENUM(TAG_SET, "$=") \
@@ -370,6 +372,7 @@ static STRING eval_tokenize(
 			c = get(p);
 			switch(c) {
 			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_RELATION_EQUAL; continue;
+			case '@': ((uint8_t *)t.str)[t.len++] = EVAL_LOAD; continue;
 			default : ((uint8_t *)t.str)[t.len++] = EVAL_ASSIGN; unget(c, p); continue;
 			}
 		case '?': ((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_IS; continue;
@@ -771,6 +774,11 @@ static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_assignment(cs + 1, e, csp);
 		l = e ? e->tag(true, l) : 0;
+		return l;
+	case EVAL_LOAD:
+		EVAL_TOKENPRINT(cs, e);
+		l = eval_assignment(cs + 1, e, csp);
+		l = e ? e->load(e, l) : 0;
 		return l;
 	default:
 		l = eval_primary(cs, e, csp);
