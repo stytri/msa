@@ -1,6 +1,6 @@
 # msa
 
-## Version 3.1.0
+## Version 3.2.0
 
 ## Command Line
 
@@ -99,11 +99,11 @@ Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a
 
 `{` _identifier_ `:` _replacement_ `=` _value_ `}`
 
-&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and _value_ is assigned to the next available field.
+&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and _value_ is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.
 
 `{` _identifier_ `:` _replacement_ `}`
 
-&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and a sequentially calaculated value is assigned to the next available field.
+&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and a sequentially calaculated value is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.
 
 #### set directives
 

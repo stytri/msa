@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  3.1.0
+#	define VERSION  3.2.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -146,10 +146,10 @@ static void readme(char *arg0) {
 	puts("\n&emsp;defines a keyword, the _identifier_ is retained in the pattern, and _no_ field assignment is made.");
 	puts("");
 	puts("`{` _identifier_ `:` _replacement_ `=` _value_ `}`");
-	puts("\n&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and _value_ is assigned to the next available field.");
+	puts("\n&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and _value_ is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.");
 	puts("");
 	puts("`{` _identifier_ `:` _replacement_ `}`");
-	puts("\n&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and a sequentially calaculated value is assigned to the next available field.");
+	puts("\n&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and a sequentially calaculated value is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.");
 	puts("");
 	puts("#### set directives");
 	puts("");
@@ -703,6 +703,12 @@ static int set_byte_bits(int n) {
 
 //------------------------------------------------------------------------------
 
+static inline char const *skipspace(char const *cs) {
+	for(int c; (c = *cs) && (c != '\n') && !isgraph(c); cs++)
+		;
+	return cs;
+}
+
 static STRING compile_expression(void *p) {
 	STRING expr = eval_tokenize(p, evals_getc, evals_ungetc, getfunc, getconst, '}',
 		STRING((N_TOKENS - 1) - n_token,
@@ -726,7 +732,7 @@ static char const *process_directive(char const *cs) {
 	VALUE  val;
 	size_t n;
 	char  *s;
-	sym.str = cs;
+	sym.str = cs = skipspace(cs);
 	sym.len = n = strcspn(cs, "{#:=}");
 	if(cs[n] == '{') {
 		val = VALUE(p, NULL, 0);
@@ -756,10 +762,14 @@ static char const *process_directive(char const *cs) {
 				cs += n + 1;
 				rpl.str = cs;
 				rpl.len = n = strcspn(cs, "=}");
-				set = symbol_lookup(N_SETS, settab, rpl);
-				if(set) {
-					type = ';';
-					rpl = set->rpl;
+				if((rpl.len > 1) || memcmp(rpl.str, "$", 1)) {
+					set = symbol_lookup(N_SETS, settab, rpl);
+					if(set) {
+						type = ';';
+						rpl = set->rpl;
+					}
+				} else {
+					rpl = sym;
 				}
 			} else {
 				rpl = sym;
@@ -811,12 +821,6 @@ static char const *process_directive(char const *cs) {
 			}
 		}
 	}
-	return cs;
-}
-
-static inline char const *skipspace(char const *cs) {
-	for(int c; (c = *cs) && (c != '\n') && !isgraph(c); cs++)
-		;
 	return cs;
 }
 
