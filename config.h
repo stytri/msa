@@ -27,12 +27,12 @@ SOFTWARE.
 //------------------------------------------------------------------------------
 
 #define N_SETS          (256)
-#define N_STRINGS       (8 * 1021ul)
-#define N_SYMBOLS       (8 * 1021ul)
-#define N_INSTRUCTIONS  (8 * 1021ul)
+#define N_STRINGS       (16 * 1024ul)
+#define N_SYMBOLS       (16 * 1024ul)
+#define N_INSTRUCTIONS  (16 * 1024ul)
 #define N_REFERENCES    (N_SYMBOLS * 4)
 #define N_TOKENS        (64 * 1024ul)
-#define N_FUNCTIONS     (256)
+#define N_FUNCTIONS     (4 * 1024)
 
 //------------------------------------------------------------------------------
 
