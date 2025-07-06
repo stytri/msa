@@ -131,6 +131,11 @@ static void readme(char *arg0) {
 	puts("\n&emsp;when an integer value is encountered in the assembly source, its is replaced by _replacement_ in the pattern.");
 	puts("\n&emsp;default is `%i`");
 	puts("");
+	puts("`$SEGMENTS=` _size_ [`,` `FIXED`]");
+	puts("\n&emsp;where _size_ is the size of a segment in **byte**s; ISO/IEC suffixes are recognised (e.g. `Ki`) for units of 1024 **byte**s, as well as the vernacular `b` suffix (e.g. `KB`).");
+	puts("\n&emsp;if segments are to be enabled, this directive _must_ be present _before_ assembler instructions are processed.");
+	puts("\n&emsp;the optional `FIXED` argument forces the use of fixed size segments.");
+	puts("");
 	puts("`$MEMORY=` _size_");
 	puts("\n&emsp;where _size_ is the size of memory in **byte**s; ISO/IEC suffixes are recognised (e.g. `Ki`) for units of 1024 **byte**s, as well as the vernacular `b` suffix (e.g. `KB`).");
 	puts("\n&emsp;this directive _must_ be present _before_ assembler instructions are processed.");
@@ -1314,6 +1319,26 @@ main(
 					}
 					if(*cs == '}') {
 						rplint = STRING(cs - s, s);
+						cs++;
+						continue;
+					}
+				} else if(strncasecmp(cs+2, "SEGMENTS=", 9) == 0) {
+					seglist.flag &= ~FIXED_SEGMENTS;
+					seglist.granularity = strtozs(cs+11, &s, 10);
+					cs = skipspace(s);
+					if(*cs == ',') {
+						cs = skipspace(cs+1);
+						if(strncasecmp(cs, "FIXED", 5) == 0) {
+							cs = skipspace(cs+5);
+							seglist.flag |= FIXED_SEGMENTS;
+						}
+					}
+					if(*cs == '}') {
+						segments = true;
+						if(memory) {
+							free(memory);
+							memory = NULL;
+						}
 						cs++;
 						continue;
 					}

@@ -79,6 +79,14 @@ These directives are identified by a initial `$`:
 
 &emsp;default is `%i`
 
+`$SEGMENTS=` _size_ [`,` `FIXED`]
+
+&emsp;where _size_ is the size of a segment in **byte**s; ISO/IEC suffixes are recognised (e.g. `Ki`) for units of 1024 **byte**s, as well as the vernacular `b` suffix (e.g. `KB`).
+
+&emsp;if segments are to be enabled, this directive _must_ be present _before_ assembler instructions are processed.
+
+&emsp;the optional `FIXED` argument forces the use of fixed size segments.
+
 `$MEMORY=` _size_
 
 &emsp;where _size_ is the size of memory in **byte**s; ISO/IEC suffixes are recognised (e.g. `Ki`) for units of 1024 **byte**s, as well as the vernacular `b` suffix (e.g. `KB`).
