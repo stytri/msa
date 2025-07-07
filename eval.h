@@ -37,7 +37,7 @@ typedef struct eval {
 	void     (*print)(char const *, ...);
 	uint64_t (*emit)(struct eval *e, uint64_t a, uint64_t v);
 	uint64_t (*load)(struct eval *e, uint64_t a);
-	uint64_t (*func)(struct eval *e, uint8_t  a);
+	uint64_t (*func)(struct eval *e, uint16_t a);
 	uint64_t (*tag) (bool, uint64_t);
 	VALUE      v[N_EVAL_VARIANTS];
 }
@@ -163,6 +163,7 @@ static const char *eval_error_message(int e) {
 #ifdef EVAL_TRACE
 static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 	uint64_t l, x = 0;
+	uint16_t    a;
 	uint8_t     o = *cs++;
 	if(o < (sizeof(eval_tokens)/sizeof(*eval_tokens))) {
 		e->trace("%s", eval_tokens[o]);
@@ -178,8 +179,11 @@ static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 			e->trace("%u{%c:0x%"PRIx64"}", (unsigned)o, (int)e->v[o].type, *(uint64_t *)(e->v[o].u));
 			return cs;
 		case EVAL_FUNCTION:
-			o = *cs++;
-			e->trace("%u", (unsigned)o);
+			a = *cs++;
+			if(N_FUNCTIONS > 256) {
+				a |= *cs++ << 8;
+			}
+			e->trace("%u", (unsigned)a);
 			return cs;
 		case EVAL_CONSTANT8_COMPLEMENT:
 			x = ~x; // fallthrough
@@ -567,12 +571,15 @@ static STRING eval_tokenize(
 				}
 				int i = getfn(n, fn);
 				if(i >= 0) {
-					if(t.len >= (token.len - 1)) {
+					if(t.len >= (token.len - (N_FUNCTIONS > 256) - 1)) {
 						EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
 						return STRING(0, NULL);
 					}
 					((uint8_t *)t.str)[t.len++] = EVAL_FUNCTION;
 					((uint8_t *)t.str)[t.len++] = i & 255;
+					if(N_FUNCTIONS > 256) {
+						((uint8_t *)t.str)[t.len++] = (i >> 8) & 255;
+					}
 					continue;
 				}
 				i = getconst(n, fn, &u);
@@ -604,6 +611,7 @@ static uint64_t eval_sequence(uint8_t const *cs, EVAL *e, uint8_t const **csp);
 
 static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	uint64_t l = 0, x = 0;
+	uint16_t a;
 	uint8_t  o = *cs;
 	switch(o) {
 	case EVAL_PARENTHESIS_LEFT:
@@ -653,8 +661,11 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	case EVAL_FUNCTION:
 		EVAL_TOKENPRINT(cs, e);
 		cs++;
-		o = *cs++;
-		l = e ? e->func(e, o) : 0;
+		a = *cs++;
+		if(N_FUNCTIONS > 256) {
+			a |= *cs++ << 8;
+		}
+		l = e ? e->func(e, a) : 0;
 		*csp = cs;
 		return l;
 	case EVAL_CONSTANT8_COMPLEMENT:

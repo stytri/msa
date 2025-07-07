@@ -651,7 +651,7 @@ static uint64_t load64(struct eval *e, uint64_t a) {
 	return ((uint64_t *)memory)[a];
 }
 
-static uint64_t callfunc(EVAL *e, uint8_t a) {
+static uint64_t callfunc(EVAL *e, uint16_t a) {
 	SYMBOL *sp = &funtab[a].sym;
 	return eval_expression(sp->rpl.str, e);
 }
