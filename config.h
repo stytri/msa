@@ -32,7 +32,7 @@ SOFTWARE.
 #define N_INSTRUCTIONS  (16 * 1024ul)
 #define N_REFERENCES    (N_SYMBOLS * 4)
 #define N_TOKENS        (64 * 1024ul)
-#define N_FUNCTIONS     (4 * 1024)
+#define N_FUNCTIONS     (256)
 
 //------------------------------------------------------------------------------
 
