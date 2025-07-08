@@ -714,6 +714,13 @@ static inline char const *skipspace(char const *cs) {
 	return cs;
 }
 
+static inline size_t trimspace(char const *cs, size_t n) {
+	while((n > 0) && !isgraph(cs[n-1])) {
+		n--;
+	}
+	return n;
+}
+
 static STRING compile_expression(void *p) {
 	STRING expr = eval_tokenize(p, evals_getc, evals_ungetc, getfunc, getconst, '}',
 		STRING((N_TOKENS - 1) - n_token,
@@ -738,7 +745,8 @@ static char const *process_directive(char const *cs) {
 	size_t n;
 	char  *s;
 	sym.str = cs = skipspace(cs);
-	sym.len = n = strcspn(cs, "{#:=}");
+	n       = strcspn(cs, "{#:=}");
+	sym.len = trimspace(cs, n);
 	if(cs[n] == '{') {
 		val = VALUE(p, NULL, 0);
 		cs += n + 1;
