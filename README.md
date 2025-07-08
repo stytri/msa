@@ -115,7 +115,7 @@ Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a
 
 #### set directives
 
-`{` _identifier_ `#` _replacement_ `}`
+`{` _identifier_ `#` _replacement_ [ `=` _value_ ] `}`
 
 &emsp;defines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.
 

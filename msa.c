@@ -158,7 +158,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("#### set directives");
 	puts("");
-	puts("`{` _identifier_ `#` _replacement_ `}`");
+	puts("`{` _identifier_ `#` _replacement_ [ `=` _value_ ] `}`");
 	puts("\n&emsp;defines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.");
 	puts("\n&emsp;**set**s maintain independant enumeration values for identifier value assignment.");
 	puts("\n&emsp;**set** member data can be exported to a C header file via the `-s` command line option:");
@@ -762,9 +762,16 @@ static char const *process_directive(char const *cs) {
 			type = '#';
 			cs += n + 1;
 			rpl.str = cs;
-			rpl.len = n = strcspn(cs, "}");
+			rpl.len = n = strcspn(cs, "=}");
+			if(cs[n] == '=') {
+				cs += n + 1;
+				val = strtoval(cs, &s);
+				n = strcspn(cs = s, "}");
+			} else {
+				val = VALUE(u, 0);
+			}
 			cs += n;
-			val = (VALUE){ .type = 0, .p = NULL };
+			val = (VALUE){ .type = val.u, .p = NULL };
 			if(!symbol_intern(N_SETS, settab, type, 0, sym, rpl, val)) {
 				report_source_error("too many sets");
 			}
@@ -791,22 +798,17 @@ static char const *process_directive(char const *cs) {
 				cs += n + 1;
 				val = strtoval(cs, &s);
 				n = strcspn(cs = s, "}");
-			} else if(set) {
-				val = VALUE(u, set->val.type);
-			} else {
-				val = VALUE(u, next_val);
-			}
-			cs += n;
-			switch(val.type) {
-			default : break;
-			case 'u':
 				if(set) {
 					set->val.type = val.u + 1;
-				} else {
-					next_val = val.u + 1;
 				}
-				break;
+			} else if(set) {
+				val = VALUE(u, set->val.type);
+				set->val.type = val.u + 1;
+			} else {
+				val = VALUE(u, next_val);
+				next_val = val.u + 1;
 			}
+			cs += n;
 			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, 0, sym, rpl, val);
 			if(!sp) {
 				report_source_error("too many symbols");
