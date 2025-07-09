@@ -292,6 +292,10 @@ _left_ `<>>` _right_
 
 ##### unary prefix
 
+`$?`_variant_
+
+&emsp;where _variant_ is the variant number; returns the type identifier of the _variant_.
+
 `=@` _address_
 
 &emsp;evaluates _address_ expression and returns the byte from memory at the resulting _address_.

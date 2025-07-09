@@ -131,6 +131,7 @@ static uint64_t eval_nul_tag(bool, uint64_t) {
 	ENUM(ERROR_INVALID,     "invalid operand") \
 \
 	ENUM(VARIANT, "$") \
+	ENUM(VARIANT_TYPE, "$?") \
 \
 	ENUM(INDIRECT, "@") \
 	ENUM(INDIRECT_TAG_AND, "@&") \
@@ -468,6 +469,19 @@ static STRING eval_tokenize(
 				((uint8_t *)t.str)[t.len++] = c;
 				continue;
 			} else switch(c) {
+			case '?':
+				c = get(p);
+				if(isdigit(c)) {
+					if(t.len >= (token.len - 1)) {
+						EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
+						return STRING(0, NULL);
+					}
+					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
+					((uint8_t *)t.str)[t.len++] = EVAL_VARIANT_TYPE;
+					((uint8_t *)t.str)[t.len++] = c;
+					continue;
+				}
+				break;
 			case '&': ((uint8_t *)t.str)[t.len++] = EVAL_TAG_AND; continue;
 			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_TAG_SET; continue;
 			}
@@ -819,6 +833,10 @@ static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_unary(cs + 1, e, csp);
 		l = e ? e->stag(e->v[*cs % N_EVAL_VARIANTS].u, l) : 0;
+		return l;
+	case EVAL_VARIANT_TYPE:
+		EVAL_TOKENPRINT(cs, e);
+		l = e ? e->v[*cs % N_EVAL_VARIANTS].type : 0;
 		return l;
 	case EVAL_LOAD:
 		EVAL_TOKENPRINT(cs, e);

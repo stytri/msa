@@ -301,6 +301,9 @@ static void readme(char *arg0) {
 	puts("");
 	puts("##### unary prefix");
 	puts("");
+	puts("`$?`_variant_");
+	puts("\n&emsp;where _variant_ is the variant number; returns the type identifier of the _variant_.");
+	puts("");
 	puts("`=@` _address_");
 	puts("\n&emsp;evaluates _address_ expression and returns the byte from memory at the resulting _address_.");
 	puts("");
@@ -949,7 +952,7 @@ static char const *compile_instruction(char const *cs) {
 						return NULL;
 					}
 					xr = &xref[n_xref++];
-					xr->type = '@';
+					xr->type = 'X';
 					xr->p    = NULL;
 					xref[n_xref].type = '?';
 					xref[n_xref].u = tag(false, -1);
@@ -968,7 +971,7 @@ static char const *compile_instruction(char const *cs) {
 					return NULL;
 				}
 				i = nv++;
-				env.v[i] = VALUE(u, (uint64_t)sp);
+				env.v[i] = (VALUE){ .type = '@', .u = (uint64_t)sp };
 				xref[n_xref++] = env.v[i];
 				xr->type += 1 << 8;
 				break;
