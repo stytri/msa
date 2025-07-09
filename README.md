@@ -296,6 +296,10 @@ _left_ `<>>` _right_
 
 &emsp;evaluates _address_ expression and returns the byte from memory at the resulting _address_.
 
+`@&`_variant_ _value_
+
+&emsp;evaluates _value_ expression and returns the bitwise and with the symbol _variant_'s _tag_ value.
+
 `$&` _value_
 
 &emsp;evaluates _value_ expression and returns the bitwise and with a global _tag_ value.

@@ -304,6 +304,9 @@ static void readme(char *arg0) {
 	puts("`=@` _address_");
 	puts("\n&emsp;evaluates _address_ expression and returns the byte from memory at the resulting _address_.");
 	puts("");
+	puts("`@&`_variant_ _value_");
+	puts("\n&emsp;evaluates _value_ expression and returns the bitwise and with the symbol _variant_'s _tag_ value.");
+	puts("");
 	puts("`$&` _value_");
 	puts("\n&emsp;evaluates _value_ expression and returns the bitwise and with a global _tag_ value.");
 	puts("");
