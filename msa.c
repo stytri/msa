@@ -929,13 +929,16 @@ static char const *compile_instruction(char const *cs) {
 			switch(sp->type) {
 			case '@':
 				if(!xr) {
-					if(n_xref >= (N_REFERENCES - (1 + nv))) {
+					if(n_xref >= (N_REFERENCES - (2 + nv))) {
 						report_source_error("too many references");
 						return NULL;
 					}
 					xr = &xref[n_xref++];
 					xr->type = '@';
 					xr->p    = NULL;
+					xref[n_xref].type = '?';
+					xref[n_xref].u = tag(false, -1);
+					n_xref++;
 					for(size_t i = 0; i < nv; i++) {
 						xref[n_xref++] = env.v[i];
 						xr->type += 1 << 8;
@@ -1409,7 +1412,7 @@ main(
 			size_t  const  n = xref[i].type >> 8;
 			uint8_t const *l = xref[i++].p;
 			size_t         j = 0;
-			while(j < n) {
+			for(tag(true, xref[i++].u); j < n;) {
 				env.v[j++] = xref[i++];
 			}
 			if(l) {
