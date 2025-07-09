@@ -38,6 +38,8 @@ typedef struct eval {
 	uint64_t (*emit)(struct eval *e, uint64_t a, uint64_t v);
 	uint64_t (*load)(struct eval *e, uint64_t a);
 	uint64_t (*func)(struct eval *e, uint16_t a);
+	uint64_t*(*symp)(uint64_t a);
+	uint64_t (*stag)(uint64_t a, uint64_t);
 	uint64_t (*tag) (bool, uint64_t);
 	VALUE      v[N_EVAL_VARIANTS];
 }
@@ -61,6 +63,19 @@ static uint64_t eval_nul_load(EVAL *, uint64_t) {
 
 static uint64_t eval_nul_func(EVAL *, uint8_t, uint64_t v) {
 	return v;
+}
+
+static uint64_t *eval_nul_symp(uint64_t) {
+	static uint64_t dummy = 0;
+	return &dummy;
+}
+
+static uint64_t eval_nul_stag(uint64_t, uint64_t) {
+	return 0;
+}
+
+static uint64_t eval_nul_tag(bool, uint64_t) {
+	return 0;
 }
 
 #define ENUM_EVAL(ENUM) \
@@ -118,6 +133,7 @@ static uint64_t eval_nul_func(EVAL *, uint8_t, uint64_t v) {
 	ENUM(VARIANT, "$") \
 \
 	ENUM(INDIRECT, "@") \
+	ENUM(INDIRECT_TAG_AND, "@&") \
 \
 	ENUM(FUNCTION, "()") \
 \
@@ -176,7 +192,7 @@ static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 			return cs;
 		case EVAL_INDIRECT:
 			o = *cs++ % N_EVAL_VARIANTS;
-			e->trace("%u{%c:0x%"PRIx64"}", (unsigned)o, (int)e->v[o].type, *(uint64_t *)(e->v[o].u));
+			e->trace("%u{%c:0x%"PRIx64"}", (unsigned)o, (int)e->v[o].type, *e->symp(e->v[o].u));
 			return cs;
 		case EVAL_FUNCTION:
 			a = *cs++;
@@ -469,6 +485,19 @@ static STRING eval_tokenize(
 				((uint8_t *)t.str)[t.len++] = c;
 				continue;
 			} else switch(c) {
+			case '&':
+				c = get(p);
+				if(isdigit(c)) {
+					if(t.len >= (token.len - 1)) {
+						EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
+						return STRING(0, NULL);
+					}
+					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
+					((uint8_t *)t.str)[t.len++] = EVAL_INDIRECT_TAG_AND;
+					((uint8_t *)t.str)[t.len++] = c;
+					continue;
+				}
+				break;
 			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_EMIT; continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
@@ -645,17 +674,17 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		cs++;
 		if(*(cs + 1) == EVAL_INCREMENT) {
 			EVAL_TOKENPRINT(cs + 1, e);
-			l = e ? (*(uint64_t *)(e->v[*cs % N_EVAL_VARIANTS].u))++ : 0;
+			l = e ? (*e->symp(e->v[*cs % N_EVAL_VARIANTS].u))++ : 0;
 			*csp = cs + 2;
 			return l;
 		}
 		if(*(cs + 1) == EVAL_DECREMENT) {
 			EVAL_TOKENPRINT(cs + 1, e);
-			l = e ? (*(uint64_t *)(e->v[*cs % N_EVAL_VARIANTS].u))-- : 0;
+			l = e ? (*e->symp(e->v[*cs % N_EVAL_VARIANTS].u))-- : 0;
 			*csp = cs + 2;
 			return l;
 		}
-		l = e ? *(uint64_t *)(e->v[*cs % N_EVAL_VARIANTS].u) : 0;
+		l = e ? *e->symp(e->v[*cs % N_EVAL_VARIANTS].u) : 0;
 		*csp = cs + 1;
 		return l;
 	case EVAL_FUNCTION:
@@ -785,6 +814,11 @@ static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_assignment(cs + 1, e, csp);
 		l = e ? e->tag(true, l) : 0;
+		return l;
+	case EVAL_INDIRECT_TAG_AND:
+		EVAL_TOKENPRINT(cs, e);
+		l = eval_unary(cs + 1, e, csp);
+		l = e ? e->stag(e->v[*cs % N_EVAL_VARIANTS].u, l) : 0;
 		return l;
 	case EVAL_LOAD:
 		EVAL_TOKENPRINT(cs, e);
@@ -1005,7 +1039,7 @@ static uint64_t eval_assignment(uint8_t const *cs, EVAL *e, uint8_t const **csp)
 			l = eval_assignment(cs + 3, e, csp);
 			if(e) {
 				if(o == EVAL_INDIRECT) {
-					*(uint64_t *)(e->v[i].u) = l;
+					*e->symp(e->v[i].u) = l;
 				} else {
 					e->v[i].u = l;
 				}

@@ -656,6 +656,21 @@ static uint64_t callfunc(EVAL *e, uint16_t a) {
 	return eval_expression(sp->rpl.str, e);
 }
 
+static uint64_t *symptr(uint64_t a) {
+	SYMBOL *sp = (SYMBOL *)a;
+	return &sp->val.u;
+}
+
+static uint64_t symtag(uint64_t a, uint64_t u) {
+	SYMBOL *sp = (SYMBOL *)a;
+	return sp->tag & u;
+}
+
+static uint64_t tag(bool set, uint64_t u) {
+	static uint64_t v = 0;
+	return set ? (v = u) : (v & u);
+}
+
 static int getfunc(size_t n, char const s[]) {
 	SYMBOL *sp = symbol_lookup(N_FUNCTIONS, funtab, STRING(n, s));
 	if(sp) {
@@ -674,17 +689,14 @@ static int getconst(size_t n, char const s[], uint64_t *p) {
 	return -1;
 }
 
-static uint64_t tag(bool set, uint64_t u) {
-	static uint64_t v = 0;
-	return set ? (v = u) : (v & u);
-}
-
 static EVAL env = {
 	.trace = trace,
 	.print = report_source_error,
 	.emit  = emit8,
 	.load  = load8,
 	.func  = callfunc,
+	.symp  = symptr,
+	.stag  = symtag,
 	.tag   = tag,
 };
 
@@ -953,7 +965,7 @@ static char const *compile_instruction(char const *cs) {
 					return NULL;
 				}
 				i = nv++;
-				env.v[i] = VALUE(u, (uint64_t)&sp->val.u);
+				env.v[i] = VALUE(u, (uint64_t)sp);
 				xref[n_xref++] = env.v[i];
 				xr->type += 1 << 8;
 				break;
