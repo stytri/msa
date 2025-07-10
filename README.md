@@ -65,7 +65,7 @@ These directives are identified by a initial `$`:
 
 `$ADDRESS=` _replacement_
 
-&emsp;where _replacement_ is a sequence of graphical characters excluding '}'.
+&emsp;where _replacement_ is a sequence of graphical characters excluding `}`.
 
 &emsp;when an address (i.e. undeclared symbol - see **identifier directives** below) is encountered in the assembly source, its is replaced by _replacement_ in the pattern.
 
@@ -73,7 +73,7 @@ These directives are identified by a initial `$`:
 
 `$INTEGER=` _replacement_
 
-&emsp;where _replacement_ is a sequence of graphical characters excluding '}'.
+&emsp;where _replacement_ is a sequence of graphical characters excluding `}`.
 
 &emsp;when an integer value is encountered in the assembly source, its is replaced by _replacement_ in the pattern.
 
@@ -145,7 +145,7 @@ _pattern_ `{` _expression_ `}` [ `:` `{` _link-expression_ `}` ]
 
 ### expressions
 
-Expressions are enclosed by a `'{' ... '}' pair.
+Expressions are enclosed by a `{` ... `}` pair.
 
 #### constants
 
@@ -165,7 +165,7 @@ C style representation.
 
 #### variants
 
-Variants are an initial `$` or `@`, followed by an integer number; `$` variants are used to directly access a value, '@' variants are used when accessing an address value via a symbol.
+Variants are an initial `$` or `@`, followed by an integer number; `$` variants are used to directly access a value, `@` variants are used when accessing an address value via a symbol.
 
 Although not implicitly asssigned, the `$0` variant is intended for use as the current address.
 
@@ -193,7 +193,7 @@ _variant_ `=` _value_
 
 ##### condition
 
-_condition_ `?` _subsequent_ [ '!' _alternate_ ]
+_condition_ `?` _subsequent_ [ `!` _alternate_ ]
 
 &emsp;evaluates the _condition_ expresssion and if the result is non-zero, evaluates the _subsquent_ expression; if it is zero, then the optional _alternate_ expression is evaluated.
 
@@ -314,11 +314,11 @@ _left_ `<>>` _right_
 
 `?` _value_
 
-&emsp;evaluates _value_ expression and returns '1' if the result is non-zero, `0` otherwise.
+&emsp;evaluates _value_ expression and returns `1` if the result is non-zero, `0` otherwise.
 
 `!` _value_
 
-&emsp;evaluates _value_ expression and returns '1' if the result is zero, `0` otherwise.
+&emsp;evaluates _value_ expression and returns `1` if the result is zero, `0` otherwise.
 
 `|` _value_
 
@@ -371,7 +371,7 @@ _identifier_
 The following characters have special meaning in assembler files: `#` `;` `,`.
 `#` and `;` are as above, and `,` is used to separate multiple instructions on a single line.
 
-Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` separator, comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.
+Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` or `:` separators (the colon separator is preserved in the pattern, the comma is elided), comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.
 
 ## segfile
 

@@ -122,12 +122,12 @@ static void readme(char *arg0) {
 	puts("\n&emsp;used when printing numbers in listings; default is `HEXADECIMAL`.");
 	puts("");
 	puts("`$ADDRESS=` _replacement_");
-	puts("\n&emsp;where _replacement_ is a sequence of graphical characters excluding '}'.");
+	puts("\n&emsp;where _replacement_ is a sequence of graphical characters excluding `}`.");
 	puts("\n&emsp;when an address (i.e. undeclared symbol - see **identifier directives** below) is encountered in the assembly source, its is replaced by _replacement_ in the pattern.");
 	puts("\n&emsp;default is `%a`");
 	puts("");
 	puts("`$INTEGER=` _replacement_");
-	puts("\n&emsp;where _replacement_ is a sequence of graphical characters excluding '}'.");
+	puts("\n&emsp;where _replacement_ is a sequence of graphical characters excluding `}`.");
 	puts("\n&emsp;when an integer value is encountered in the assembly source, its is replaced by _replacement_ in the pattern.");
 	puts("\n&emsp;default is `%i`");
 	puts("");
@@ -180,7 +180,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("### expressions");
 	puts("");
-	puts("Expressions are enclosed by a `'{' ... '}' pair.");
+	puts("Expressions are enclosed by a `{` ... `}` pair.");
 	puts("");
 	puts("#### constants");
 	puts("");
@@ -198,7 +198,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("#### variants");
 	puts("");
-	puts("Variants are an initial `$` or `@`, followed by an integer number; `$` variants are used to directly access a value, '@' variants are used when accessing an address value via a symbol.");
+	puts("Variants are an initial `$` or `@`, followed by an integer number; `$` variants are used to directly access a value, `@` variants are used when accessing an address value via a symbol.");
 	puts("");
 	puts("Although not implicitly asssigned, the `$0` variant is intended for use as the current address.");
 	puts("");
@@ -223,7 +223,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("##### condition");
 	puts("");
-	puts("_condition_ `?` _subsequent_ [ '!' _alternate_ ]");
+	puts("_condition_ `?` _subsequent_ [ `!` _alternate_ ]");
 	puts("\n&emsp;evaluates the _condition_ expresssion and if the result is non-zero, evaluates the _subsquent_ expression; if it is zero, then the optional _alternate_ expression is evaluated.");
 	puts("");
 	puts("##### boolean");
@@ -317,10 +317,10 @@ static void readme(char *arg0) {
 	puts("\n&emsp;evaluates _value_ expression and assigns to a global _tag_ value.");
 	puts("");
 	puts("`?` _value_");
-	puts("\n&emsp;evaluates _value_ expression and returns '1' if the result is non-zero, `0` otherwise.");
+	puts("\n&emsp;evaluates _value_ expression and returns `1` if the result is non-zero, `0` otherwise.");
 	puts("");
 	puts("`!` _value_");
-	puts("\n&emsp;evaluates _value_ expression and returns '1' if the result is zero, `0` otherwise.");
+	puts("\n&emsp;evaluates _value_ expression and returns `1` if the result is zero, `0` otherwise.");
 	puts("");
 	puts("`|` _value_");
 	puts("\n&emsp;evaluates _value_ expression and returns the position of the most-siginificant bit (`1` for lowest bit), or `0` if no bit set.");
@@ -362,7 +362,7 @@ static void readme(char *arg0) {
 	puts("The following characters have special meaning in assembler files: `#` `;` `,`.");
 	puts("`#` and `;` are as above, and `,` is used to separate multiple instructions on a single line.");
 	puts("");
-	puts("Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` separator, comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.");
+	puts("Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` or `:` separators (the colon separator is preserved in the pattern, the comma is elided), comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.");
 	puts("");
 	puts("## segfile");
 	puts("");
@@ -1034,6 +1034,9 @@ static char const *compile_instruction(char const *cs) {
 		}
 		PUSHC(c);
 		cs++;
+		if(c == ':') {
+			break;
+		}
 	}
 	*t = '\0';
 	if(t != buf) {
