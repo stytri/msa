@@ -150,20 +150,22 @@ static void readme(char *arg0) {
 	puts("`{` _identifier_ `}`");
 	puts("\n&emsp;defines a keyword, the _identifier_ is retained in the pattern, and _no_ field assignment is made.");
 	puts("");
-	puts("`{` _identifier_ `:` _replacement_ `=` _value_ `}`");
-	puts("\n&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and _value_ is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.");
+	puts("`{` _identifier_ `:` _replacement_ `=` _expression_ `}`");
+	puts("\n&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and value of _expression_ is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.");
+	puts("\n&emsp;**N.B.** _expression_ is evaluated immediately.");
 	puts("");
 	puts("`{` _identifier_ `:` _replacement_ `}`");
 	puts("\n&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and a sequentially calaculated value is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.");
 	puts("");
 	puts("#### set directives");
 	puts("");
-	puts("`{` _identifier_ `#` _replacement_ [ `=` _value_ ] `}`");
+	puts("`{` _identifier_ `#` _replacement_ [ `=` _expression_ ] `}`");
 	puts("\n&emsp;defines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.");
 	puts("\n&emsp;**set**s maintain independant enumeration values for identifier value assignment.");
 	puts("\n&emsp;**set** member data can be exported to a C header file via the `-s` command line option:");
 	puts("\n&emsp;\tfor each **set** member as a `#define` _set-identifier_`_`_member-identifier_ _member-value_");
 	puts("\n&emsp;\tand an array _set-identifier_`_name` of _member-identifier_ strings.");
+	puts("\n&emsp;**N.B.** _expression_ is evaluated immediately.");
 	puts("");
 	puts("#### function directives");
 	puts("");
@@ -411,12 +413,12 @@ static size_t      lineno     = 1;
 static void report_source_error(char const *fmt, ...) {
 	va_list val;
 	va_start(val, fmt);
-
+#ifndef NDEBUG
 	fprintf(stderr, "\n%.*s:%zu:", infile_len, infile, lineno);
 	vfprintf(stderr, fmt, val);
 	fputc('\n', stderr);
 	fflush(stderr);
-
+#endif
 	va_end(val);
 	return;
 }
@@ -759,9 +761,9 @@ static char const *process_directive(char const *cs) {
 	static unsigned long long next_val = 0;
 	STRING sym;
 	STRING rpl;
+	STRING xpr;
 	VALUE  val;
 	size_t n;
-	char  *s;
 	sym.str = cs = skipspace(cs);
 	n       = strcspn(cs, "{#:=}");
 	sym.len = trimspace(cs, n);
@@ -781,12 +783,13 @@ static char const *process_directive(char const *cs) {
 			cs += n + 1;
 			rpl.str = cs;
 			rpl.len = n = strcspn(cs, "=}");
+			val = VALUE(u, 0);
 			if(cs[n] == '=') {
 				cs += n + 1;
-				val = strtoval(cs, &s);
-				n = strcspn(cs = s, "}");
-			} else {
-				val = VALUE(u, 0);
+				xpr = compile_expression(&cs);
+				val.u = eval_expression(xpr.str, &env);
+				cs -= (xpr.len > 0); // restore terminating '}'
+				n = 0;
 			}
 			cs += n;
 			val = (VALUE){ .type = val.u, .p = NULL };
@@ -812,10 +815,13 @@ static char const *process_directive(char const *cs) {
 			} else {
 				rpl = sym;
 			}
+			val = VALUE(u, 0);
 			if(cs[n] == '=') {
 				cs += n + 1;
-				val = strtoval(cs, &s);
-				n = strcspn(cs = s, "}");
+				xpr = compile_expression(&cs);
+				val.u = eval_expression(xpr.str, &env);
+				cs -= (xpr.len > 0); // restore terminating '}'
+				n = 0;
 				if(set) {
 					set->val.type = val.u + 1;
 				}
