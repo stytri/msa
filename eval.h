@@ -310,33 +310,42 @@ static uintmax_t eval_getuint(int c, void *p, int (*get)(void *), int (*unget)(i
 		switch(c) {
 		case 'B': case 'b':
 			c = get(p);
-			while(('0' <= c) && (c <= '1')) {
-				u = (u * 2) + (c - '0');
+			while((c == '\'') || (('0' <= c) && (c <= '1'))) {
+				if(c != '\'') {
+					u = (u * 2) + (c - '0');
+				}
 				c = get(p);
 			}
 			break;
 		case 'X': case 'x':
 			c = get(p);
 			for(int upper = 0, lower = 0;
-				(('0' <= c) && (c <= '9'))
+				(c == '\'')
+					|| (('0' <= c) && (c <= '9'))
 					|| (upper = (('A' <= c) && (c <= 'F')))
 					|| (lower = (('a' <= c) && (c <= 'f')));
 				upper = 0, lower = 0
 			) {
-				u = (u * 16) + (upper ? (10 + c - 'A') : (lower ? (10 + c - 'a') : (c - '0')));
+				if(c != '\'') {
+					u = (u * 16) + (upper ? (10 + c - 'A') : (lower ? (10 + c - 'a') : (c - '0')));
+				}
 				c = get(p);
 			}
 			break;
 		default :
-			while(('0' <= c) && (c <= '7')) {
-				u = (u * 8) + (c - '0');
+			while((c == '\'') || (('0' <= c) && (c <= '7'))) {
+				if(c != '\'') {
+					u = (u * 8) + (c - '0');
+				}
 				c = get(p);
 			}
 			break;
 		}
 	} else {
-		while(('0' <= c) && (c <= '9')) {
-			u = (u * 10) + (c - '0');
+		while((c == '\'') || (('0' <= c) && (c <= '9'))) {
+			if(c != '\'') {
+				u = (u * 10) + (c - '0');
+			}
 			c = get(p);
 		}
 	}
