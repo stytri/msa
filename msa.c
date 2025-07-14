@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  3.2.0
+#	define VERSION  3.3.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -485,7 +485,7 @@ static SEGLIST seglist      = {};
 static STRING rpladdr       = STRING(2, "%a");
 static STRING rplint        = STRING(2, "%i");
 
-static uint64_t emit8(struct eval *e, uint64_t a, uint64_t v) {
+static uint64_t emit8(EVAL *e, uint64_t a, uint64_t v) {
 	(void)e;
 	if(a > sizeof_memory) {
 		report_address_out_of_range(a);
@@ -511,7 +511,7 @@ static uint64_t emit8(struct eval *e, uint64_t a, uint64_t v) {
 	return ((uint8_t *)memory)[a] = v;
 }
 
-static uint64_t emit16(struct eval *e, uint64_t a, uint64_t v) {
+static uint64_t emit16(EVAL *e, uint64_t a, uint64_t v) {
 	(void)e;
 	if(a > sizeof_memory) {
 		report_address_out_of_range(a);
@@ -537,7 +537,7 @@ static uint64_t emit16(struct eval *e, uint64_t a, uint64_t v) {
 	return ((uint16_t *)memory)[a] = v;
 }
 
-static uint64_t emit32(struct eval *e, uint64_t a, uint64_t v) {
+static uint64_t emit32(EVAL *e, uint64_t a, uint64_t v) {
 	(void)e;
 	if(a > sizeof_memory) {
 		report_address_out_of_range(a);
@@ -563,7 +563,7 @@ static uint64_t emit32(struct eval *e, uint64_t a, uint64_t v) {
 	return ((uint32_t *)memory)[a] = v;
 }
 
-static uint64_t emit64(struct eval *e, uint64_t a, uint64_t v) {
+static uint64_t emit64(EVAL *e, uint64_t a, uint64_t v) {
 	(void)e;
 	if(a > sizeof_memory) {
 		report_address_out_of_range(a);
@@ -589,7 +589,7 @@ static uint64_t emit64(struct eval *e, uint64_t a, uint64_t v) {
 	return ((uint64_t *)memory)[a] = v;
 }
 
-static uint64_t load8(struct eval *e, uint64_t a) {
+static uint64_t load8(EVAL *e, uint64_t a) {
 	(void)e;
 	if(a > sizeof_memory) {
 		report_address_out_of_range(a);
@@ -606,7 +606,7 @@ static uint64_t load8(struct eval *e, uint64_t a) {
 	return ((uint8_t *)memory)[a];
 }
 
-static uint64_t load16(struct eval *e, uint64_t a) {
+static uint64_t load16(EVAL *e, uint64_t a) {
 	(void)e;
 	if(a > sizeof_memory) {
 		report_address_out_of_range(a);
@@ -623,7 +623,7 @@ static uint64_t load16(struct eval *e, uint64_t a) {
 	return ((uint16_t *)memory)[a];
 }
 
-static uint64_t load32(struct eval *e, uint64_t a) {
+static uint64_t load32(EVAL *e, uint64_t a) {
 	(void)e;
 	if(a > sizeof_memory) {
 		report_address_out_of_range(a);
@@ -640,7 +640,7 @@ static uint64_t load32(struct eval *e, uint64_t a) {
 	return ((uint32_t *)memory)[a];
 }
 
-static uint64_t load64(struct eval *e, uint64_t a) {
+static uint64_t load64(EVAL *e, uint64_t a) {
 	(void)e;
 	if(a > sizeof_memory) {
 		report_address_out_of_range(a);
