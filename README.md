@@ -1,6 +1,6 @@
 # msa
 
-## Version 3.2.0
+## Version 3.3.0
 
 ## Command Line
 
@@ -105,9 +105,11 @@ Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a
 
 &emsp;defines a keyword, the _identifier_ is retained in the pattern, and _no_ field assignment is made.
 
-`{` _identifier_ `:` _replacement_ `=` _value_ `}`
+`{` _identifier_ `:` _replacement_ `=` _expression_ `}`
 
-&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and _value_ is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.
+&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and value of _expression_ is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.
+
+&emsp;**N.B.** _expression_ is evaluated immediately.
 
 `{` _identifier_ `:` _replacement_ `}`
 
@@ -115,7 +117,7 @@ Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a
 
 #### set directives
 
-`{` _identifier_ `#` _replacement_ [ `=` _value_ ] `}`
+`{` _identifier_ `#` _replacement_ [ `=` _expression_ ] `}`
 
 &emsp;defines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.
 
@@ -126,6 +128,8 @@ Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a
 &emsp;	for each **set** member as a `#define` _set-identifier_`_`_member-identifier_ _member-value_
 
 &emsp;	and an array _set-identifier_`_name` of _member-identifier_ strings.
+
+&emsp;**N.B.** _expression_ is evaluated immediately.
 
 #### function directives
 
