@@ -42,6 +42,8 @@ typedef struct {
 }
 	SYMBOL;
 
+#define HIDDEN_SYMBOL  (UINT64_C(1) << 31)
+
 typedef struct {
 	uint64_t h;
 	size_t   ref;

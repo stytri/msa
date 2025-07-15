@@ -147,7 +147,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a` to `z`, and the digits `0` to `9` which _may not_ be the initial character.");
 	puts("Additionally, the back-tick ( ` ) character can be used to quote the next [non-identifier] graphical character as part of the identifier;");
-	puts("**N.B.** this _must not_ be used in identifiers exported to header files.");
+	puts("**N.B.** _identifiers_ containing quoted characters are hidden from export.");
 	puts("");
 	puts("`{` _identifier_ `}`");
 	puts("\n&emsp;defines a keyword, the _identifier_ is retained in the pattern, and _no_ field assignment is made.");
@@ -765,17 +765,27 @@ static char const *process_directive(char const *cs) {
 	STRING rpl;
 	STRING xpr;
 	VALUE  val;
-	size_t n;
+	sym.len = 0;
 	sym.str = cs = skipspace(cs);
-	n       = strcspn(cs, "{#:=}");
-	sym.len = trimspace(cs, n);
+	int hidden = 0;
+	for(int quote = 0, c = *cs;
+		(quote && isgraph(c)) || (c == '`') || (c == '_') || (c == '$') || isalnum(c);
+		c = cs[sym.len]
+	) {
+		quote = !quote && (c == '`');
+		hidden |= quote;
+		sym.len++;
+	}
+	cs = skipspace(cs + sym.len);
+	uint64_t st = hidden ? HIDDEN_SYMBOL : 0;
+	size_t n = 0;
 	if(cs[n] == '{') {
 		val = VALUE(p, NULL, 0);
 		cs += n + 1;
 		rpl = compile_expression(&cs);
 		n   = strcspn(cs, "}");
 		cs += n;
-		if(!symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', 0, sym, rpl, val)) {
+		if(!symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', st, sym, rpl, val)) {
 			report_source_error("too many functions");
 		}
 	} else {
@@ -795,7 +805,7 @@ static char const *process_directive(char const *cs) {
 			}
 			cs += n;
 			val = (VALUE){ .type = val.u, .p = NULL };
-			if(!symbol_intern(N_SETS, settab, type, 0, sym, rpl, val)) {
+			if(!symbol_intern(N_SETS, settab, type, st, sym, rpl, val)) {
 				report_source_error("too many sets");
 			}
 		} else {
@@ -835,7 +845,7 @@ static char const *process_directive(char const *cs) {
 				next_val = val.u + 1;
 			}
 			cs += n;
-			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, 0, sym, rpl, val);
+			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, st, sym, rpl, val);
 			if(!sp) {
 				report_source_error("too many symbols");
 			} else if(set) {
@@ -943,13 +953,15 @@ static char const *compile_instruction(char const *cs) {
 		cy = cy ? cy : cs;
 		if((c == '`') || (c == '_') || (c == '$') || isalpha(c)) {
 			char const *ct = cs;
-			bool quote = false;
+			bool quote = false, hidden = false;
 			do {
 				quote = !quote && (c == '`');
+				hidden |= quote;
 				c = *++cs;
 			} while((quote && isgraph(c)) || (c == '`') || (c == '_') || (c == '$') || isalnum(c))
 				;
-			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, '@', tag(false, -1), STRING(cs - ct, ct), rpladdr, VALUE(u, 0));
+			uint64_t st = tag(false, -1) | (hidden ? HIDDEN_SYMBOL : 0);
+			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, '@', st, STRING(cs - ct, ct), rpladdr, VALUE(u, 0));
 			if(!sp) {
 				report_source_error("too many symbols");
 				return NULL;
@@ -965,7 +977,7 @@ static char const *compile_instruction(char const *cs) {
 					xr->type = 'X';
 					xr->p    = NULL;
 					xref[n_xref].type = '?';
-					xref[n_xref].u = tag(false, -1);
+					xref[n_xref].u = st;
 					n_xref++;
 					for(size_t i = 0; i < nv; i++) {
 						xref[n_xref++] = env.v[i];
@@ -1501,20 +1513,24 @@ main(
 				size_t n = valp->type;
 				for(spp = (SYMBOL **)valp->p, end = spp + n; spp < end; ) {
 					sp = *spp++;
-					fprintf(out, "#define %.*s_%.*s %llu\n",
-						(int)set->sym.len, (char const *)set->sym.str,
-						(int)sp->sym.len, (char const *)sp->sym.str,
-						sp->val.u
-					);
+					if(!(sp->tag & HIDDEN_SYMBOL)) {
+						fprintf(out, "#define %.*s_%.*s %llu\n",
+							(int)set->sym.len, (char const *)set->sym.str,
+							(int)sp->sym.len, (char const *)sp->sym.str,
+							sp->val.u
+						);
+					}
 				}
 				fprintf(out, "\nstatic char const *%.*s_name[] = {\n",
 					(int)set->sym.len, (char const *)set->sym.str
 				);
 				for(spp = (SYMBOL **)valp->p, end = spp + n; spp < end; ) {
 					sp = *spp++;
-					fprintf(out, "\t[%llu] = \"%.*s\",\n",
-						sp->val.u, (int)sp->sym.len, (char const *)sp->sym.str
-					);
+					if(!(sp->tag & HIDDEN_SYMBOL)) {
+						fprintf(out, "\t[%llu] = \"%.*s\",\n",
+							sp->val.u, (int)sp->sym.len, (char const *)sp->sym.str
+						);
+					}
 				}
 			}
 			fprintf(out, "};\n");
@@ -1529,11 +1545,13 @@ main(
 				if((sp->type != ':') && (sp->type != '=')) {
 					continue;
 				}
-				fprintf(out, "#define %s%.*s %llu\n",
-					prefix,
-					(int)sp->sym.len, (char const *)sp->sym.str,
-					sp->val.u
-				);
+				if(!(sp->tag & HIDDEN_SYMBOL)) {
+					fprintf(out, "#define %s%.*s %llu\n",
+						prefix,
+						(int)sp->sym.len, (char const *)sp->sym.str,
+						sp->val.u
+					);
+				}
 			}
 		}
 		fprintf(out, "\n#endif//ndef %.*s__included\n", setnamelen, setname);
@@ -1550,8 +1568,10 @@ main(
 			if((symtab[i].ref == 0) || (sp->type != '@')) {
 				continue;
 			}
-			names_len += sp->sym.len + 1;
-			n_symbols++;
+			if(!(sp->tag & HIDDEN_SYMBOL)) {
+				names_len += sp->sym.len + 1;
+				n_symbols++;
+			}
 		}
 		uint8_t         hd[16]; memset(hd, 0, sizeof(hd));
 		uint32_t        ri[64]; memset(ri, 0, sizeof(ri));
@@ -1567,7 +1587,9 @@ main(
 			if((symtab[i].ref == 0) || (sp->type != '@')) {
 				continue;
 			}
-			spp[j++] = sp;
+			if(!(sp->tag & HIDDEN_SYMBOL)) {
+				spp[j++] = sp;
+			}
 		}
 		qsort(spp, n_symbols, sizeof(*spp), cmpsymbols);
 		int      rix = 0;
