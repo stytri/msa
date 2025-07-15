@@ -100,6 +100,8 @@ These directives are identified by a initial `$`:
 #### identifier directives
 
 Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a` to `z`, and the digits `0` to `9` which _may not_ be the initial character.
+Additionally, the back-tick ( ` ) character can be used to quote the next [non-identifier] graphical character as part of the identifier;
+**N.B.** this _must not_ be used in identifiers exported to header files.
 
 `{` _identifier_ `}`
 

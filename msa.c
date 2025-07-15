@@ -146,6 +146,8 @@ static void readme(char *arg0) {
 	puts("#### identifier directives");
 	puts("");
 	puts("Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a` to `z`, and the digits `0` to `9` which _may not_ be the initial character.");
+	puts("Additionally, the back-tick ( ` ) character can be used to quote the next [non-identifier] graphical character as part of the identifier;");
+	puts("**N.B.** this _must not_ be used in identifiers exported to header files.");
 	puts("");
 	puts("`{` _identifier_ `}`");
 	puts("\n&emsp;defines a keyword, the _identifier_ is retained in the pattern, and _no_ field assignment is made.");
