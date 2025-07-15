@@ -939,11 +939,13 @@ static char const *compile_instruction(char const *cs) {
 			continue;
 		}
 		cy = cy ? cy : cs;
-		if((c == '_') || (c == '$') || isalpha(c)) {
+		if((c == '`') || (c == '_') || (c == '$') || isalpha(c)) {
 			char const *ct = cs;
+			bool quote = false;
 			do {
+				quote = !quote && (c == '`');
 				c = *++cs;
-			} while((c == '_') || (c == '$') || isalnum(c))
+			} while((quote && isgraph(c)) || (c == '`') || (c == '_') || (c == '$') || isalnum(c))
 				;
 			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, '@', tag(false, -1), STRING(cs - ct, ct), rpladdr, VALUE(u, 0));
 			if(!sp) {

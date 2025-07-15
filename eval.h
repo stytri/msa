@@ -597,15 +597,20 @@ static STRING eval_tokenize(
 				((uint8_t *)t.str)[t.len++] = (x >> 56) & 255u;
 				continue;
 			}
-			if(isalpha(c) || (c == '_')) {
+			if(isalpha(c) || (c == '_') || (c == '`')) {
 				size_t n = 1;
 				char   fn[65] = { c };
-				for(c = get(p); isalnum(c) || (c == '_'); c = get(p)) {
+				c = get(p);
+				for(bool quote = false;
+					(quote && isgraph(c)) || isalnum(c) || (c == '_') || (c == '`');
+					c = get(p)
+				) {
 					if(n > 63) {
 						EVAL_TOKENIZE__ERROR(EVAL_ERROR_FUNCTION);
 						return STRING(0, NULL);
 					}
 					fn[n++] = c;
+					quote = !quote && (c == '`');
 				}
 				fn[n] = '\0';
 				unget(c, p);
