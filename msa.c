@@ -773,19 +773,17 @@ static char const *process_directive(char const *cs) {
 	size_t n = 0;
 	sym.len = 0;
 	sym.str = cs = skipspace(cs);
-	if(*cs == '{') {
+	while(*cs == '{') {
 		n = strcspn(cs, "}");
 		n += (cs[n] == '}');
 		if(strncmp(cs, "{hidden}", n) == 0) {
 			st |= HIDDEN_SYMBOL;
-			cs = skipspace(cs + n);
 		} else if(strncmp(cs, "{delimeter}", n) == 0) {
 			st |= DELIMETER_SYMBOL;
-			cs = skipspace(cs + n);
 		} else {
 			report_source_error("unknown attribute");
-			cs = skipspace(cs + n);
 		}
+		cs = skipspace(cs + n);
 		n = 0;
 	}
 	for(int quote = 0, c = *cs;
