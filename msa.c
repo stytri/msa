@@ -1537,6 +1537,10 @@ main(
 		}
 		if(prefix) {
 			fprintf(out, "\n");
+			fprintf(out, "#define %sBYTEBITS %i\n" , prefix, byte_bits);
+			fprintf(out, "#define %sSEGMENTS %u\n" , prefix, segments ? 1 : 0);
+			fprintf(out, "#define %sMEMORY   %zu\n", prefix, sizeof_memory);
+			fprintf(out, "\n");
 			for(size_t i = 0; i < N_SYMBOLS; i++) {
 				if(symtab[i].ref == 0) {
 					continue;
