@@ -771,9 +771,7 @@ static char const *process_directive(char const *cs) {
 	VALUE  val;
 	uint64_t st = 0;
 	size_t n = 0;
-	sym.len = 0;
-	sym.str = cs = skipspace(cs);
-	while(*cs == '{') {
+	for(cs = skipspace(cs); *cs == '{'; ) {
 		n = strcspn(cs, "}");
 		n += (cs[n] == '}');
 		if(strncmp(cs, "{hidden}", n) == 0) {
@@ -786,6 +784,8 @@ static char const *process_directive(char const *cs) {
 		cs = skipspace(cs + n);
 		n = 0;
 	}
+	sym.len = 0;
+	sym.str = cs;
 	for(int quote = 0, c = *cs;
 		(quote && isgraph(c)) || (c == '`') || (c == '_') || (c == '$') || isalnum(c);
 		c = cs[sym.len]
