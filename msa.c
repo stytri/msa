@@ -149,14 +149,18 @@ static void readme(char *arg0) {
 	puts("Additionally, the back-tick ( ` ) character can be used to quote the next [non-identifier] graphical character as part of the identifier;");
 	puts("**N.B.** _identifiers_ containing quoted characters are hidden from export.");
 	puts("");
-	puts("`{` _identifier_ `}`");
+	puts("Identifiers may be preceeded by an _attribute_, current attributes are:");
+	puts("-	`{delimeter}`  indicates that the _identifier_ is to be treated as an instruction delimeter.");
+	puts("-	`{hidden}`     indicates that the _identifier_ is to be excluded from export.");
+	puts("");
+	puts("`{` [ _attribute_ ] _identifier_ `}`");
 	puts("\n&emsp;defines a keyword, the _identifier_ is retained in the pattern, and _no_ field assignment is made.");
 	puts("");
-	puts("`{` _identifier_ `:` _replacement_ `=` _expression_ `}`");
+	puts("`{` [ _attribute_ ] _identifier_ `:` _replacement_ `=` _expression_ `}`");
 	puts("\n&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and value of _expression_ is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.");
 	puts("\n&emsp;**N.B.** _expression_ is evaluated immediately.");
 	puts("");
-	puts("`{` _identifier_ `:` _replacement_ `}`");
+	puts("`{` [ _attribute_ ] _identifier_ `:` _replacement_ `}`");
 	puts("\n&emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and a sequentially calaculated value is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.");
 	puts("");
 	puts("#### set directives");
@@ -765,27 +769,46 @@ static char const *process_directive(char const *cs) {
 	STRING rpl;
 	STRING xpr;
 	VALUE  val;
+	uint64_t st = 0;
+	size_t n = 0;
 	sym.len = 0;
 	sym.str = cs = skipspace(cs);
-	int hidden = 0;
+	if(*cs == '{') {
+		n = strcspn(cs, "}");
+		n += (cs[n] == '}');
+		if(strncmp(cs, "{hidden}", n) == 0) {
+			st |= HIDDEN_SYMBOL;
+			cs = skipspace(cs + n);
+		} else if(strncmp(cs, "{delimeter}", n) == 0) {
+			st |= DELIMETER_SYMBOL;
+			cs = skipspace(cs + n);
+		} else {
+			report_source_error("unknown attribute");
+			cs = skipspace(cs + n);
+		}
+		n = 0;
+	}
 	for(int quote = 0, c = *cs;
 		(quote && isgraph(c)) || (c == '`') || (c == '_') || (c == '$') || isalnum(c);
 		c = cs[sym.len]
 	) {
 		quote = !quote && (c == '`');
-		hidden |= quote;
+		st |= quote ? HIDDEN_SYMBOL : 0;
 		sym.len++;
 	}
+	if(sym.len == 0) {
+		report_source_error("missing identifier");
+	}
 	cs = skipspace(cs + sym.len);
-	uint64_t st = hidden ? HIDDEN_SYMBOL : 0;
-	size_t n = 0;
 	if(cs[n] == '{') {
 		val = VALUE(p, NULL, 0);
 		cs += n + 1;
 		rpl = compile_expression(&cs);
 		n   = strcspn(cs, "}");
 		cs += n;
-		if(!symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', st, sym, rpl, val)) {
+		if((sym.len > 0)
+			&& !symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', st, sym, rpl, val)
+		) {
 			report_source_error("too many functions");
 		}
 	} else {
@@ -805,7 +828,9 @@ static char const *process_directive(char const *cs) {
 			}
 			cs += n;
 			val = (VALUE){ .type = val.u, .p = NULL };
-			if(!symbol_intern(N_SETS, settab, type, st, sym, rpl, val)) {
+			if((sym.len > 0)
+				&& !symbol_intern(N_SETS, settab, type, st, sym, rpl, val)
+			) {
 				report_source_error("too many sets");
 			}
 		} else {
@@ -845,30 +870,32 @@ static char const *process_directive(char const *cs) {
 				next_val = val.u + 1;
 			}
 			cs += n;
-			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, st, sym, rpl, val);
-			if(!sp) {
-				report_source_error("too many symbols");
-			} else if(set) {
-				VALUE *valp = (void *)set->val.p;
-				if(!valp) {
-					valp = malloc(sizeof(*valp));
+			if(sym.len > 0) {
+				SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, st, sym, rpl, val);
+				if(!sp) {
+					report_source_error("too many symbols");
+				} else if(set) {
+					VALUE *valp = (void *)set->val.p;
 					if(!valp) {
+						valp = malloc(sizeof(*valp));
+						if(!valp) {
+							perror("");
+							abort();
+						}
+						valp->type = 0;
+						valp->p = NULL;
+						set->val.p = valp;
+					}
+					n = valp->type;
+					SYMBOL **spp = realloc((void *)valp->p, (n + 1) * sizeof(sp));
+					if(!spp) {
 						perror("");
 						abort();
 					}
-					valp->type = 0;
-					valp->p = NULL;
-					set->val.p = valp;
+					spp[n] = sp;
+					valp->p = spp;
+					valp->type = n + 1;
 				}
-				n = valp->type;
-				SYMBOL **spp = realloc((void *)valp->p, (n + 1) * sizeof(sp));
-				if(!spp) {
-					perror("");
-					abort();
-				}
-				spp[n] = sp;
-				valp->p = spp;
-				valp->type = n + 1;
 			}
 		}
 	}
@@ -1012,6 +1039,9 @@ static char const *compile_instruction(char const *cs) {
 			}
 			for(i = 0; i < sp->rpl.len; i++) {
 				PUSHC(((char *)sp->rpl.str)[i]);
+			}
+			if(sp->tag & DELIMETER_SYMBOL) {
+				break;
 			}
 			continue;
 		}

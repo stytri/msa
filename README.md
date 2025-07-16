@@ -103,17 +103,21 @@ Identifiers consist of the characters `_` and `$`, the letters `A` to `Z` and `a
 Additionally, the back-tick ( ` ) character can be used to quote the next [non-identifier] graphical character as part of the identifier;
 **N.B.** _identifiers_ containing quoted characters are hidden from export.
 
-`{` _identifier_ `}`
+Identifiers may be preceeded by an _attribute_, current attributes are:
+-	`{delimeter}`  indicates that the _identifier_ is to be treated as an instruction delimeter.
+-	`{hidden}`     indicates that the _identifier_ is to be excluded from export.
+
+`{` [ _attribute_ ] _identifier_ `}`
 
 &emsp;defines a keyword, the _identifier_ is retained in the pattern, and _no_ field assignment is made.
 
-`{` _identifier_ `:` _replacement_ `=` _expression_ `}`
+`{` [ _attribute_ ] _identifier_ `:` _replacement_ `=` _expression_ `}`
 
 &emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and value of _expression_ is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.
 
 &emsp;**N.B.** _expression_ is evaluated immediately.
 
-`{` _identifier_ `:` _replacement_ `}`
+`{` [ _attribute_ ] _identifier_ `:` _replacement_ `}`
 
 &emsp;defines an enumerated field value, the _identifier_ is replaced by _replacement_ in the pattern, and a sequentially calaculated value is assigned to the next available field. Where _replacement_ is `$`, the _replacement_ is the same as _identifier_.
 

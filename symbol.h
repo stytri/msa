@@ -43,6 +43,7 @@ typedef struct {
 	SYMBOL;
 
 #define HIDDEN_SYMBOL  (UINT64_C(1) << 31)
+#define DELIMETER_SYMBOL  (UINT64_C(1) << 30)
 
 typedef struct {
 	uint64_t h;
