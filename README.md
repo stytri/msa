@@ -1,6 +1,6 @@
 # msa
 
-## Version 3.3.0
+## Version 3.4.0
 
 ## Command Line
 
@@ -382,6 +382,9 @@ The following characters have special meaning in assembler files: `#` `;` `,`.
 `#` and `;` are as above, and `,` is used to separate multiple instructions on a single line.
 
 Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` or `:` separators (the colon separator is preserved in the pattern, the comma is elided), comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.
+
+Inside parenthesis (`(`...`)` or, `[`...`]`) delimeters and comments are inhibited, and the characters can be used as part of the pattern.
+Parenthesis handling is _very_ basic; `(` and `[` increase the nesting level,  `]` and `)` decrease it; there is no balancing or, matching of the parenthesis characters.
 
 ## segfile
 

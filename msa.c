@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  3.3.0
+#	define VERSION  3.4.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -371,6 +371,9 @@ static void readme(char *arg0) {
 	puts("`#` and `;` are as above, and `,` is used to separate multiple instructions on a single line.");
 	puts("");
 	puts("Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` or `:` separators (the colon separator is preserved in the pattern, the comma is elided), comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.");
+	puts("");
+	puts("Inside parenthesis (`(`...`)` or, `[`...`]`) delimeters and comments are inhibited, and the characters can be used as part of the pattern.");
+	puts("Parenthesis handling is _very_ basic; `(` and `[` increase the nesting level,  `]` and `)` decrease it; there is no balancing or, matching of the parenthesis characters.");
 	puts("");
 	puts("## segfile");
 	puts("");
@@ -967,6 +970,7 @@ static char const *compile_instruction(char const *cs) {
 	unsigned nv = 1;
 	VALUE   *xr = NULL;
 	size_t   o_xref = n_xref;
+	unsigned paren = 0;
 	size_t   i;
 	char    *s;
 	char const *cy = NULL;
@@ -1039,7 +1043,9 @@ static char const *compile_instruction(char const *cs) {
 				PUSHC(((char *)sp->rpl.str)[i]);
 			}
 			if(sp->tag & DELIMETER_SYMBOL) {
-				break;
+				if(!paren) {
+					break;
+				}
 			}
 			continue;
 		}
@@ -1072,20 +1078,34 @@ static char const *compile_instruction(char const *cs) {
 			}
 		}
 		if(c == ';') {
-			do {
-				c = *++cs;
-			} while(c && (c != '\n'))
-				;
-			break;
+			if(!paren) {
+				do {
+					c = *++cs;
+				} while(c && (c != '\n'))
+					;
+				break;
+			}
 		}
 		if(c == ',') {
 			cs++;
-			break;
+			if(!paren) {
+				break;
+			}
 		}
 		PUSHC(c);
 		cs++;
+		if((c == '(') || (c == '[')) {
+			paren++;
+			continue;
+		}
+		if((c == ')') || (c == ']')) {
+			paren--;
+			continue;
+		}
 		if(c == ':') {
-			break;
+			if(!paren) {
+				break;
+			}
 		}
 	}
 	*t = '\0';
