@@ -127,7 +127,7 @@ Identifiers may be preceeded by an _attribute_, current attributes are:
 
 &emsp;defines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.
 
-&emsp;**set**s maintain independant enumeration values for identifier value assignment.
+&emsp;**set**s maintain independant enumeration values for identifier value assignment. Additionaly, the members of the **set** inherit the attributes of the **set**.
 
 &emsp;**set** member data can be exported to a C header file via the `-s` command line option:
 

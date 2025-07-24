@@ -167,7 +167,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("`{` _identifier_ `#` _replacement_ [ `=` _expression_ ] `}`");
 	puts("\n&emsp;defines a common _replacement_ for a *set* of _identifiers_; when processing an **identifier directive**, the _replacement_ field is first look for in the **set** table and the _replacement_ from the **set** member is used instead.");
-	puts("\n&emsp;**set**s maintain independant enumeration values for identifier value assignment.");
+	puts("\n&emsp;**set**s maintain independant enumeration values for identifier value assignment. Additionaly, the members of the **set** inherit the attributes of the **set**.");
 	puts("\n&emsp;**set** member data can be exported to a C header file via the `-s` command line option:");
 	puts("\n&emsp;\tfor each **set** member as a `#define` _set-identifier_`_`_member-identifier_ _member-value_");
 	puts("\n&emsp;\tand an array _set-identifier_`_name` of _member-identifier_ strings.");
@@ -846,6 +846,7 @@ static char const *process_directive(char const *cs) {
 					if(set) {
 						type = ';';
 						rpl = set->rpl;
+						st |= set->tag;
 					}
 				} else {
 					rpl = sym;
