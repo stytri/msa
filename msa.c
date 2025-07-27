@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  3.4.0
+#	define VERSION  3.4.1
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -152,6 +152,7 @@ static void readme(char *arg0) {
 	puts("Identifiers may be preceeded by an _attribute_, current attributes are:");
 	puts("-	`{delimeter}`  indicates that the _identifier_ is to be treated as an instruction delimeter.");
 	puts("-	`{hidden}`     indicates that the _identifier_ is to be excluded from export.");
+	puts("-	`{postfix}`    indicates that the **set** _identifier_ is to be appended to the _member_ _identifier_ when exported: normally it will be prepended.");
 	puts("");
 	puts("`{` [ _attribute_ ] _identifier_ `}`");
 	puts("\n&emsp;defines a keyword, the _identifier_ is retained in the pattern, and _no_ field assignment is made.");
@@ -781,6 +782,8 @@ static char const *process_directive(char const *cs) {
 			st |= HIDDEN_SYMBOL;
 		} else if(strncmp(cs, "{delimeter}", n) == 0) {
 			st |= DELIMETER_SYMBOL;
+		} else if(strncmp(cs, "{postfix}", n) == 0) {
+			st |= POSTFIX_SYMBOL;
 		} else {
 			report_source_error("unknown attribute");
 		}
@@ -1563,11 +1566,19 @@ main(
 				for(spp = (SYMBOL **)valp->p, end = spp + n; spp < end; ) {
 					sp = *spp++;
 					if(!(sp->tag & HIDDEN_SYMBOL)) {
-						fprintf(out, "#define %.*s_%.*s %llu\n",
-							(int)set->sym.len, (char const *)set->sym.str,
-							(int)sp->sym.len, (char const *)sp->sym.str,
-							sp->val.u
-						);
+						if(sp->tag & POSTFIX_SYMBOL) {
+							fprintf(out, "#define %.*s_%.*s %llu\n",
+								(int)sp->sym.len, (char const *)sp->sym.str,
+								(int)set->sym.len, (char const *)set->sym.str,
+								sp->val.u
+							);
+						} else {
+							fprintf(out, "#define %.*s_%.*s %llu\n",
+								(int)set->sym.len, (char const *)set->sym.str,
+								(int)sp->sym.len, (char const *)sp->sym.str,
+								sp->val.u
+							);
+						}
 					}
 				}
 				fprintf(out, "\nstatic char const *%.*s_name[] = {\n",

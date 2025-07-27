@@ -1,6 +1,6 @@
 # msa
 
-## Version 3.4.0
+## Version 3.4.1
 
 ## Command Line
 
@@ -106,6 +106,7 @@ Additionally, the back-tick ( ` ) character can be used to quote the next [non-i
 Identifiers may be preceeded by an _attribute_, current attributes are:
 -	`{delimeter}`  indicates that the _identifier_ is to be treated as an instruction delimeter.
 -	`{hidden}`     indicates that the _identifier_ is to be excluded from export.
+-	`{postfix}`    indicates that the **set** _identifier_ is to be appended to the _member_ _identifier_ when exported: normally it will be prepended.
 
 `{` [ _attribute_ ] _identifier_ `}`
 
