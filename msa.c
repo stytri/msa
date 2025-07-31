@@ -1179,35 +1179,6 @@ static int cmpsymbols(void const *lp, void const *rp) {
 
 //------------------------------------------------------------------------------
 
-#ifdef __MINGW64__
-int _dowildcard = -1;
-#endif
-
-static struct optget options[] = {
-	{  0, "Matching String Assembler: a simple assembler for virtual machines.", NULL },
-	{  0, "usage: %s [OPTION]... [FILE]...",   NULL },
-	{  0, "options:",                NULL },
-	{  1, "-h, --help",              "display this help and exit" },
-	{  2, "    --version",           "display version and exit" },
-	{  3, "    --license",           "display license and exit" },
-	{  4, "    --readme",            "display readme and exit" },
-	{  9, "-o, --output FILE",       "output to FILE" },
-	{ 10, "-l, --listing FILE",      "write listing to FILE" },
-#ifdef EVAL_TRACE
-	{ 11, "-t, --trace FILE",        "write trace to FILE" },
-#endif//def EVAL_TRACE
-	{ 12, "-s, --set-header FILE",   "write header FILE for sets" },
-	{ 13, "-y, --symbols PFIX",      "include non-set symbols, adding prefix PFIX, in set header" },
-	{ 14, "-a, --symfile FILE",      "write (addressable) symbol information to FILE" },
-	{ 15, "-g, --segments SIZE",     "enable segmented memory - segments are allocated in blocks of SIZE bytes." },
-	{ 16, "-G, --fixed-segments SIZE","as -g, but segments are of fixed SIZE" },
-};
-static size_t const n_options = (sizeof(options) / sizeof(options[0]));
-
-static void usage(char *arg0, FILE *out) {
-	optuse(n_options, options, arg0, out);
-}
-
 static inline bool qerror(char const *cs) {
 	perror(cs);
 	return false;
@@ -1228,97 +1199,8 @@ static FILE *openout(char const *file, FILE *out) {
 	return out;
 }
 
-int
-main(
-	int    argc,
-	char **argv
-) {
+static bool process_files(int argi, int argc, char **argv) {
 	bool failed = false;
-	char const *prefix = NULL;
-
-	int argi = 1;
-	if(argi == argc) {
-		usage(argv[0], stderr);
-		return EXIT_FAILURE;
-	}
-	while((argi < argc) && (*argv[argi] == '-') && *(argv[argi] + 1)) {
-		char const *args = argv[argi++];
-		char const *argp = NULL;
-		do {
-			int argn   = argc - argi;
-			int params = 0;
-			switch(optget(n_options - 2, options + 2, &argp, args, argn, &params)) {
-			case 1:
-				usage(argv[0], stdout);
-				return 0;
-			case 2:
-				version();
-				return 0;
-			case 3:
-				license();
-				return 0;
-			case 4:
-				readme(argv[0]);
-				return 0;
-			case 9:
-				outfile = argv[argi];
-				break;
-			case 10:
-				failed = failed || !(listout = openout(argv[argi], listout));
-				break;
-#ifdef EVAL_TRACE
-			case 11:
-				failed = failed || !(traceout = openout(argv[argi], traceout));
-				break;
-#endif//def EVAL_TRACE
-			case 12:
-				setfile = argv[argi];
-				break;
-			case 13:
-				prefix = argv[argi];
-				break;
-			case 14:
-				symfile = argv[argi];
-				break;
-			case 15:
-				seglist.flag &= ~FIXED_SEGMENTS;
-				seglist.granularity = strtozs(argv[argi], NULL, 0);
-				segments = true;
-				break;
-			case 16:
-				seglist.flag |= FIXED_SEGMENTS;
-				seglist.granularity = strtozs(argv[argi], NULL, 0);
-				segments = true;
-				break;
-			default:
-				errorf("invalid option: %s", args);
-				usage(argv[0], stderr);
-				return EXIT_FAILURE;
-			}
-			argi += params;
-		} while(argp)
-			;
-	}
-
-	if(!failed) {
-		xref   = calloc(N_REFERENCES  , sizeof(*xref));
-		symtab = calloc(N_SYMBOLS     , sizeof(*symtab));
-		funtab = calloc(N_FUNCTIONS   , sizeof(*funtab));
-		instab = calloc(N_INSTRUCTIONS, sizeof(*instab));
-		settab = calloc(N_SETS        , sizeof(*settab));
-		token  = calloc(N_TOKENS      , sizeof(*token));
-		if(!xref || !symtab  || !funtab || !instab || !token) {
-			perror();
-			abort();
-		}
-	}
-
-	for(size_t i = 0; i < N_EVAL_VARIANTS; i++) {
-		env.v[i] = VALUE(u, 0);
-	}
-
-	listlen = 0;
-	listing("\n; LISTING\n; =======\n\n");
 
 	lineno = 1;
 	infile = argv[argi];
@@ -1500,33 +1382,30 @@ main(
 		failed = failed || !(cs = process(cs));
 	}
 
-	if(!failed && (n_xref > 0)) {
-		listlen = 0;
-		listing("\n; PATCHES\n; =======\n\n");
-		for(size_t i = 0; i < n_xref; ) {
-			size_t  const  n = xref[i].type >> 8;
-			uint8_t const *l = xref[i++].p;
-			size_t         j = 0;
-			for(tag(true, xref[i++].u); j < n;) {
-				env.v[j++] = xref[i++];
-			}
-			if(l) {
-				listlen = 0;
-				listing("%6"PRIu64":  ", env.v[0].u);
-				eval_expression(l, &env);
-				listing("\n");
-			}
+	return failed;
+}
+
+static void apply_patches(void) {
+	for(size_t i = 0; i < n_xref; ) {
+		size_t  const  n = xref[i].type >> 8;
+		uint8_t const *l = xref[i++].p;
+		size_t         j = 0;
+		for(tag(true, xref[i++].u); j < n;) {
+			env.v[j++] = xref[i++];
+		}
+		if(l) {
+			listlen = 0;
+			listing("%6"PRIu64":  ", env.v[0].u);
+			eval_expression(l, &env);
+			listing("\n");
 		}
 	}
-	if(!failed) {
-		listlen = 0;
-		listing("\n; SIZE = %zu\n\n", maxaddr + 1);
-	}
-	if(listout && (listout != stdout)) {
-		fclose(listout);
-	}
+}
 
-	if(!failed && *outfile) DEFER(FILE *out = fopen(outfile, "wb"),
+static bool write_binary_file(void) {
+	bool failed = false;
+
+	DEFER(FILE *out = fopen(outfile, "wb"),
 		!(failed = !out) || qerror(outfile),
 		fclose(out)
 	) {
@@ -1544,7 +1423,13 @@ main(
 		}
 	}
 
-	if(!failed && *setfile) DEFER(FILE *out = fopen(setfile, "w"),
+	return failed;
+}
+
+static bool write_header_file(char const *prefix) {
+	bool failed = false;
+
+	DEFER(FILE *out = fopen(setfile, "w"),
 		!(failed = !out) || qerror(setfile),
 		fclose(out)
 	) {
@@ -1621,7 +1506,13 @@ main(
 		fprintf(out, "\n#endif//ndef %.*s__included\n", setnamelen, setname);
 	}
 
-	if(!failed && *symfile) DEFER(FILE *out = fopen(symfile, "wb"),
+	return failed;
+}
+
+static bool write_symbol_file(void) {
+	bool failed = false;
+
+	DEFER(FILE *out = fopen(symfile, "wb"),
 		!(failed = !out) || qerror(setfile),
 		fclose(out)
 	) {
@@ -1669,6 +1560,158 @@ main(
 		if(symfile_write(hd, ri, n_symbols, sfp, names_len, names, sizeof(data), &data, out) != 0) {
 			perror(symfile);
 		}
+	}
+
+	return failed;
+}
+//------------------------------------------------------------------------------
+
+#ifdef __MINGW64__
+int _dowildcard = -1;
+#endif
+
+static struct optget options[] = {
+	{  0, "Matching String Assembler: a simple assembler for virtual machines.", NULL },
+	{  0, "usage: %s [OPTION]... [FILE]...",   NULL },
+	{  0, "options:",                NULL },
+	{  1, "-h, --help",              "display this help and exit" },
+	{  2, "    --version",           "display version and exit" },
+	{  3, "    --license",           "display license and exit" },
+	{  4, "    --readme",            "display readme and exit" },
+	{  9, "-o, --output FILE",       "output to FILE" },
+	{ 10, "-l, --listing FILE",      "write listing to FILE" },
+#ifdef EVAL_TRACE
+	{ 11, "-t, --trace FILE",        "write trace to FILE" },
+#endif//def EVAL_TRACE
+	{ 12, "-s, --set-header FILE",   "write header FILE for sets" },
+	{ 13, "-y, --symbols PFIX",      "include non-set symbols, adding prefix PFIX, in set header" },
+	{ 14, "-a, --symfile FILE",      "write (addressable) symbol information to FILE" },
+	{ 15, "-g, --segments SIZE",     "enable segmented memory - segments are allocated in blocks of SIZE bytes." },
+	{ 16, "-G, --fixed-segments SIZE","as -g, but segments are of fixed SIZE" },
+};
+static size_t const n_options = (sizeof(options) / sizeof(options[0]));
+
+static void usage(char *arg0, FILE *out) {
+	optuse(n_options, options, arg0, out);
+}
+
+int
+main(
+	int    argc,
+	char **argv
+) {
+	bool failed = false;
+	char const *prefix = NULL;
+
+	int argi = 1;
+	if(argi == argc) {
+		usage(argv[0], stderr);
+		return EXIT_FAILURE;
+	}
+	while((argi < argc) && (*argv[argi] == '-') && *(argv[argi] + 1)) {
+		char const *args = argv[argi++];
+		char const *argp = NULL;
+		do {
+			int argn   = argc - argi;
+			int params = 0;
+			switch(optget(n_options - 2, options + 2, &argp, args, argn, &params)) {
+			case 1:
+				usage(argv[0], stdout);
+				return 0;
+			case 2:
+				version();
+				return 0;
+			case 3:
+				license();
+				return 0;
+			case 4:
+				readme(argv[0]);
+				return 0;
+			case 9:
+				outfile = argv[argi];
+				break;
+			case 10:
+				failed = failed || !(listout = openout(argv[argi], listout));
+				break;
+#ifdef EVAL_TRACE
+			case 11:
+				failed = failed || !(traceout = openout(argv[argi], traceout));
+				break;
+#endif//def EVAL_TRACE
+			case 12:
+				setfile = argv[argi];
+				break;
+			case 13:
+				prefix = argv[argi];
+				break;
+			case 14:
+				symfile = argv[argi];
+				break;
+			case 15:
+				seglist.flag &= ~FIXED_SEGMENTS;
+				seglist.granularity = strtozs(argv[argi], NULL, 0);
+				segments = true;
+				break;
+			case 16:
+				seglist.flag |= FIXED_SEGMENTS;
+				seglist.granularity = strtozs(argv[argi], NULL, 0);
+				segments = true;
+				break;
+			default:
+				errorf("invalid option: %s", args);
+				usage(argv[0], stderr);
+				return EXIT_FAILURE;
+			}
+			argi += params;
+		} while(argp)
+			;
+	}
+
+	if(!failed) {
+		xref   = calloc(N_REFERENCES  , sizeof(*xref));
+		symtab = calloc(N_SYMBOLS     , sizeof(*symtab));
+		funtab = calloc(N_FUNCTIONS   , sizeof(*funtab));
+		instab = calloc(N_INSTRUCTIONS, sizeof(*instab));
+		settab = calloc(N_SETS        , sizeof(*settab));
+		token  = calloc(N_TOKENS      , sizeof(*token));
+		if(!xref || !symtab  || !funtab || !instab || !token) {
+			perror();
+			abort();
+		}
+	}
+
+	for(size_t i = 0; i < N_EVAL_VARIANTS; i++) {
+		env.v[i] = VALUE(u, 0);
+	}
+
+	listlen = 0;
+	listing("\n; LISTING\n; =======\n\n");
+
+	failed = process_files(argi, argc, argv);
+
+	if(!failed && (n_xref > 0)) {
+		listlen = 0;
+		listing("\n; PATCHES\n; =======\n\n");
+		apply_patches();
+	}
+	if(!failed) {
+		listlen = 0;
+		listing("\n; SIZE = %zu\n\n", maxaddr + 1);
+	}
+	if(listout && (listout != stdout)) {
+		fclose(listout);
+	}
+
+	if(!failed && *outfile) {
+		failed = write_binary_file();
+	}
+
+	if(!failed && *setfile) {
+		failed = write_header_file(prefix);
+	}
+
+	if(!failed && *setfile) {
+		failed = write_symbol_file();
 	}
 
 	return failed ? EXIT_FAILURE : EXIT_SUCCESS;
