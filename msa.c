@@ -1710,7 +1710,7 @@ main(
 		failed = write_header_file(prefix);
 	}
 
-	if(!failed && *setfile) {
+	if(!failed && *symfile) {
 		failed = write_symbol_file();
 	}
 
