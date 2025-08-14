@@ -449,7 +449,7 @@ static FILE *errout = NULL;
 static void report_source_error(char const *fmt, ...) {
 	va_list val;
 	va_start(val, fmt);
-#ifndef NDEBUG
+#ifdef NDEBUG
 	if(!errout) {
 		errout = stderr;
 	}
