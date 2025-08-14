@@ -444,12 +444,15 @@ static char const *infile     = "";
 static int         infile_len = 0;
 static size_t      lineno     = 1;
 
-static FILE *errout;
+static FILE *errout = NULL;
 
 static void report_source_error(char const *fmt, ...) {
 	va_list val;
 	va_start(val, fmt);
 #ifndef NDEBUG
+	if(!errout) {
+		errout = stderr;
+	}
 	fprintf(errout, "\n%.*s:%zu:", infile_len, infile, lineno);
 	vfprintf(errout, fmt, val);
 	fputc('\n', errout);
