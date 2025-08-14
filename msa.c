@@ -227,7 +227,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("##### integers");
 	puts("");
-	puts("C style representation.");
+	puts("C style representation, and simple character constants.");
 	puts("");
 	puts("#### variants");
 	puts("");

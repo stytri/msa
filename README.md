@@ -215,7 +215,7 @@ Expressions are enclosed by a `{` ... `}` pair.
 
 ##### integers
 
-C style representation.
+C style representation, and simple character constants.
 
 #### variants
 

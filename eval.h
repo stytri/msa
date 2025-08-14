@@ -525,6 +525,28 @@ static STRING eval_tokenize(
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
 			continue;
+		case '\'':
+			c = get(p);
+			if(c == '\\') {
+				c = get(p);
+				switch(c) {
+				default : break;
+				case 'a': c = '\a'; break;
+				case 'b': c = '\b'; break;
+				case 'f': c = '\f'; break;
+				case 'n': c = '\n'; break;
+				case 'r': c = '\r'; break;
+				case 't': c = '\t'; break;
+				case 'v': c = '\v'; break;
+				}
+			}
+			u = c & 255;
+			c = get(p);
+			if(c != '\'') {
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
+				continue;
+			}
+			goto case_uint;
 		default:
 			if(isdigit(c)) {
 				u = eval_getuint(c, p, get, unget);
