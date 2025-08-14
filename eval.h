@@ -851,6 +851,7 @@ static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	case EVAL_VARIANT_TYPE:
 		EVAL_TOKENPRINT(cs, e);
 		l = e ? e->v[*cs % N_EVAL_VARIANTS].type : 0;
+		*csp = cs + 1;
 		return l;
 	case EVAL_LOAD:
 		EVAL_TOKENPRINT(cs, e);
