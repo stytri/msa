@@ -1,6 +1,6 @@
 # msa
 
-## Version 3.4.1
+## Version 3.5.0
 
 ## Command Line
 
@@ -12,6 +12,7 @@ options:
       --version              display version and exit
       --license              display license and exit
       --readme               display readme and exit
+  -e, --error FILE           output errors to FILE
   -o, --output FILE          output to FILE
   -l, --listing FILE         write listing to FILE
   -s, --set-header FILE      write header FILE for sets
@@ -93,6 +94,48 @@ These directives are identified by a initial `$`:
 
 &emsp;this directive _must_ be present _before_ assembler instructions are processed.
 
+In the following _character_, refers to a **named character**; these are:
+-	`amp` yields character `&`
+-	`ast` yields character `*`
+-	`bsol` yields character `\`
+-	`colon` yields character `:`
+-	`comma` yields character `,`
+-	`commat` yields character `@`
+-	`equals` yields character `=`
+-	`excl` yields character `!`
+-	`hat` yields character `^`
+-	`lbrack` yields character `[`
+-	`lpar` yields character `(`
+-	`lt` yields character `<`
+-	`gt` yields character `>`
+-	`percnt` yields character `%`
+-	`period` yields character `.`
+-	`quest` yields character `?`
+-	`quot` yields character `"`
+-	`rbrack` yields character `]`
+-	`rpar` yields character `)`
+-	`semi` yields character `;`
+-	`sol` yields character `/`
+-	`tilde` yields character `~`
+-	`vert` yields character `|`
+-	`none` disables COMMENT and DELIMITER; LABEL is left alone.
+
+&emsp;the above character names may be preceeded by `&`, and terminated by `;`, as per HTML.
+
+`$COMMENT=` _character_
+
+&emsp;in assembler source files, _character_ starts a comment (default `;`).
+
+&emsp;if COMMENT is disabled, then `#` becomes the defacto comment character (see description of [`#line`](#line-directives)).
+
+`$DELIMITER=` _character_
+
+&emsp;in assembler source files, _character_ delimits multiple instructions on a single line (default `,`).
+
+`$LABEL=` _character_
+
+&emsp;in assembler source files, _character_ indicates that the preceeding symbol is a label definition (default `:`).
+
 `$NOCASE`
 
 &emsp;ignore the character case of symbols.
@@ -104,7 +147,7 @@ Additionally, the back-tick ( ` ) character can be used to quote the next [non-i
 **N.B.** _identifiers_ containing quoted characters are hidden from export.
 
 Identifiers may be preceeded by an _attribute_, current attributes are:
--	`{delimeter}`  indicates that the _identifier_ is to be treated as an instruction delimeter.
+-	`{delimiter}`  indicates that the _identifier_ is to be treated as an instruction delimiter.
 -	`{hidden}`     indicates that the _identifier_ is to be excluded from export.
 -	`{postfix}`    indicates that the **set** _identifier_ is to be appended to the _member_ _identifier_ when exported: normally it will be prepended.
 
@@ -384,7 +427,7 @@ The following characters have special meaning in assembler files: `#` `;` `,`.
 
 Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` or `:` separators (the colon separator is preserved in the pattern, the comma is elided), comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.
 
-Inside parenthesis (`(`...`)` or, `[`...`]`) delimeters and comments are inhibited, and the characters can be used as part of the pattern.
+Inside parenthesis (`(`...`)` or, `[`...`]`) delimiters and comments are inhibited, and the characters can be used as part of the pattern.
 Parenthesis handling is _very_ basic; `(` and `[` increase the nesting level,  `]` and `)` decrease it; there is no balancing or, matching of the parenthesis characters.
 
 ## segfile

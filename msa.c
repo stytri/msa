@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  3.4.1
+#	define VERSION  3.5.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -69,6 +69,8 @@ static void version(void) {
 #define VERSIONTOSTR(VERSIONTOSTR__version)  VERSION__STR(VERSIONTOSTR__version)
 	puts("## Version "VERSIONTOSTR(VERSION));
 }
+static char const *get_nameof_character_by_index(size_t);
+static int get_named_character_by_index(size_t);
 static void readme(char *arg0) {
 	int         n;
 	char const *file = getfilename(arg0, &n);
@@ -140,6 +142,28 @@ static void readme(char *arg0) {
 	puts("\n&emsp;where _size_ is the size of memory in **byte**s; ISO/IEC suffixes are recognised (e.g. `Ki`) for units of 1024 **byte**s, as well as the vernacular `b` suffix (e.g. `KB`).");
 	puts("\n&emsp;this directive _must_ be present _before_ assembler instructions are processed.");
 	puts("");
+	puts("In the following _character_, refers to a **named character**; these are:");
+	int c;
+	for(size_t i = 0; (c = get_named_character_by_index(i)) >= 0; i++) {
+		char const *cs = get_nameof_character_by_index(i);
+		if(c) {
+			printf("-\t`%s` yields character `%c`\n", cs, c);
+		} else {
+			printf("-\t`%s` disables COMMENT and DELIMITER; LABEL is left alone.\n", cs);
+		}
+	}
+	puts("\n&emsp;the above character names may be preceeded by `&`, and terminated by `;`, as per HTML.");
+	puts("");
+	puts("`$COMMENT=` _character_");
+	puts("\n&emsp;in assembler source files, _character_ starts a comment (default `;`).");
+	puts("\n&emsp;if COMMENT is disabled, then `#` becomes the defacto comment character (see description of [`#line`](#line-directives)).");
+	puts("");
+	puts("`$DELIMITER=` _character_");
+	puts("\n&emsp;in assembler source files, _character_ delimits multiple instructions on a single line (default `,`).");
+	puts("");
+	puts("`$LABEL=` _character_");
+	puts("\n&emsp;in assembler source files, _character_ indicates that the preceeding symbol is a label definition (default `:`).");
+	puts("");
 	puts("`$NOCASE`");
 	puts("\n&emsp;ignore the character case of symbols.");
 	puts("");
@@ -150,7 +174,7 @@ static void readme(char *arg0) {
 	puts("**N.B.** _identifiers_ containing quoted characters are hidden from export.");
 	puts("");
 	puts("Identifiers may be preceeded by an _attribute_, current attributes are:");
-	puts("-	`{delimeter}`  indicates that the _identifier_ is to be treated as an instruction delimeter.");
+	puts("-	`{delimiter}`  indicates that the _identifier_ is to be treated as an instruction delimiter.");
 	puts("-	`{hidden}`     indicates that the _identifier_ is to be excluded from export.");
 	puts("-	`{postfix}`    indicates that the **set** _identifier_ is to be appended to the _member_ _identifier_ when exported: normally it will be prepended.");
 	puts("");
@@ -373,7 +397,7 @@ static void readme(char *arg0) {
 	puts("");
 	puts("Source lines are parsed, spaces are elided, symbols and constants are replaced by their defined replacement strings, stopping at the `,` or `:` separators (the colon separator is preserved in the pattern, the comma is elided), comments, or end-of-line. The resulting pattern is then looked up in the pattern table and if a match is found, the corresponding expression is evaluated.");
 	puts("");
-	puts("Inside parenthesis (`(`...`)` or, `[`...`]`) delimeters and comments are inhibited, and the characters can be used as part of the pattern.");
+	puts("Inside parenthesis (`(`...`)` or, `[`...`]`) delimiters and comments are inhibited, and the characters can be used as part of the pattern.");
 	puts("Parenthesis handling is _very_ basic; `(` and `[` increase the nesting level,  `]` and `)` decrease it; there is no balancing or, matching of the parenthesis characters.");
 	puts("");
 	puts("## segfile");
@@ -420,14 +444,16 @@ static char const *infile     = "";
 static int         infile_len = 0;
 static size_t      lineno     = 1;
 
+static FILE *errout;
+
 static void report_source_error(char const *fmt, ...) {
 	va_list val;
 	va_start(val, fmt);
 #ifndef NDEBUG
-	fprintf(stderr, "\n%.*s:%zu:", infile_len, infile, lineno);
-	vfprintf(stderr, fmt, val);
-	fputc('\n', stderr);
-	fflush(stderr);
+	fprintf(errout, "\n%.*s:%zu:", infile_len, infile, lineno);
+	vfprintf(errout, fmt, val);
+	fputc('\n', errout);
+	fflush(errout);
 #endif
 	va_end(val);
 	return;
@@ -467,6 +493,70 @@ static inline void trace(char const *fmt, ...) {
 		va_end(val);
 	}
 	return;
+}
+
+//------------------------------------------------------------------------------
+
+static char delimiter_char = ',';
+static char comment_char   = ';';
+static char label_char     = ':';
+
+static struct {
+	char const *ct;
+	int         c;
+} const named_char[] = {
+	{ "amp"   , '&'  },
+	{ "ast"   , '*'  },
+	{ "bsol"  , '\\' },
+	{ "colon" , ':'  },
+	{ "comma" , ','  },
+	{ "commat", '@'  },
+	{ "equals", '='  },
+	{ "excl"  , '!'  },
+	{ "hat"   , '^'  },
+	{ "lbrack", '['  },
+	{ "lpar"  , '('  },
+	{ "lt"    , '<'  },
+	{ "gt"    , '>'  },
+	{ "percnt", '%'  },
+	{ "period", '.'  },
+	{ "quest" , '?'  },
+	{ "quot"  , '"'  },
+	{ "rbrack", ']'  },
+	{ "rpar"  , ')'  },
+	{ "semi"  , ';'  },
+	{ "sol"   , '/'  },
+	{ "tilde" , '~'  },
+	{ "vert"  , '|'  },
+	{ "none"  ,  0   },
+};
+static char const *get_nameof_character_by_index(size_t i) {
+	if(i < (sizeof(named_char)/sizeof(*named_char))) {
+		return named_char[i].ct;
+	}
+	return "unknown";
+}
+static int get_named_character_by_index(size_t i) {
+	if(i < (sizeof(named_char)/sizeof(*named_char))) {
+		return named_char[i].c;
+	}
+	return -1;
+}
+static int get_named_character(int n, char const *cs, int c) {
+	if((n > 0) && (*cs == '&')) {
+		cs++;
+		n--;
+	}
+	if((n > 0) && (cs[n - 1] == ';')) {
+		n--;
+	}
+	if(n > 0) for(size_t i = 0; i < (sizeof(named_char)/sizeof(*named_char)); i++) {
+		int m = strlen(named_char[i].ct);
+		if((n == m) && (strncmp(cs, named_char[i].ct, m) == 0)) {
+			return (named_char[i].c > 0) ? named_char[i].c : c;
+		}
+	}
+	return c;
 }
 
 //------------------------------------------------------------------------------
@@ -780,8 +870,8 @@ static char const *process_directive(char const *cs) {
 		n += (cs[n] == '}');
 		if(strncmp(cs, "{hidden}", n) == 0) {
 			st |= HIDDEN_SYMBOL;
-		} else if(strncmp(cs, "{delimeter}", n) == 0) {
-			st |= DELIMETER_SYMBOL;
+		} else if(strncmp(cs, "{delimiter}", n) == 0) {
+			st |= DELIMITER_SYMBOL;
 		} else if(strncmp(cs, "{postfix}", n) == 0) {
 			st |= POSTFIX_SYMBOL;
 		} else {
@@ -927,7 +1017,8 @@ static char const *define_instruction(char const *cs) {
 	cs = cr + 1;
 	STRING rpl = compile_expression(&cs);
 	if(rpl.len == 0) {
-		return NULL;
+		report_source_error("invalid instruction expression");
+		return cs;
 	}
 	for(; (cr > ct) && isblank(*(cr - 1)); cr--)
 		;
@@ -941,7 +1032,8 @@ static char const *define_instruction(char const *cs) {
 		cs = ct;
 		ltx = compile_expression(&cs);
 		if(ltx.len == 0) {
-			return NULL;
+			report_source_error("invalid link expression");
+			return cs;
 		}
 	}
 	VALUE val = VALUE(p, ltx.str);
@@ -1046,7 +1138,7 @@ static char const *compile_instruction(char const *cs) {
 			for(i = 0; i < sp->rpl.len; i++) {
 				PUSHC(((char *)sp->rpl.str)[i]);
 			}
-			if(sp->tag & DELIMETER_SYMBOL) {
+			if(sp->tag & DELIMITER_SYMBOL) {
 				if(!paren) {
 					break;
 				}
@@ -1081,7 +1173,7 @@ static char const *compile_instruction(char const *cs) {
 				continue;
 			}
 		}
-		if(c == ';') {
+		if(comment_char && (c == comment_char)) {
 			if(!paren) {
 				do {
 					c = *++cs;
@@ -1090,7 +1182,7 @@ static char const *compile_instruction(char const *cs) {
 				break;
 			}
 		}
-		if(c == ',') {
+		if(delimiter_char && (c == delimiter_char)) {
 			cs++;
 			if(!paren) {
 				break;
@@ -1106,7 +1198,7 @@ static char const *compile_instruction(char const *cs) {
 			paren--;
 			continue;
 		}
-		if(c == ':') {
+		if(c == label_char) {
 			if(!paren) {
 				break;
 			}
@@ -1206,12 +1298,13 @@ static bool process_files(int argi, int argc, char **argv) {
 	infile = argv[argi];
 	infile_len = strlen(infile);
 	char const *(*process)(char const *) = define_instruction;
+	int comment = ';';
 	DEFER(char const *src = loadsourcefiles(argc - argi, &argv[argi]),
 		!(failed = !src) || qerror(infile),
 		(void)0
 	) for(char const *cs = src;;) {
 		int c = *(cs = skipspace(cs));
-		if(c == ';') {
+		if(comment && (c == comment)) {
 			do {
 				c = *++cs;
 			} while(c && (c != '\n'))
@@ -1231,7 +1324,7 @@ static bool process_files(int argi, int argc, char **argv) {
 			if(line_directive) {
 				char *s = (char *)cs;
 				lineno = (size_t)strtoumax(cs, &s, 0);
-				cs = s;
+				cs = s ? s : cs;
 				c = *(cs = skipspace(cs));
 				if(c == '"') {
 					infile = cs + 1;
@@ -1242,8 +1335,10 @@ static bool process_files(int argi, int argc, char **argv) {
 					infile_len = cs - infile;
 					if(source_file_is_msa(infile, infile_len)) {
 						process = define_instruction;
+						comment = ';';
 					} else {
 						process = compile_instruction;
+						comment = comment_char;
 					}
 					if(c == '"') {
 						c = *++cs;
@@ -1263,7 +1358,7 @@ static bool process_files(int argi, int argc, char **argv) {
 				char *s;
 				if(strncasecmp(cs+2, "BYTEBITS=", 9) == 0) {
 					int n = strtol(cs+11, &s, 10);
-					cs = skipspace(s);
+					cs = s ? skipspace(s) : cs;
 					if((*cs == '}') && set_byte_bits(n)) {
 						cs++;
 						continue;
@@ -1294,7 +1389,7 @@ static bool process_files(int argi, int argc, char **argv) {
 					}
 				} else if(strncasecmp(cs+2, "ADDRESS=", 8) == 0) {
 					s = (char *)skipspace(cs+10);
-					while(isgraph(*cs) && (*cs != '}')) {
+					for(cs = s; isgraph(*cs) && (*cs != '}');) {
 						cs++;
 					}
 					if(*cs == '}') {
@@ -1304,7 +1399,7 @@ static bool process_files(int argi, int argc, char **argv) {
 					}
 				} else if(strncasecmp(cs+2, "INTEGER=", 8) == 0) {
 					s = (char *)skipspace(cs+10);
-					while(isgraph(*cs) && (*cs != '}')) {
+					for(cs = s; isgraph(*cs) && (*cs != '}');) {
 						cs++;
 					}
 					if(*cs == '}') {
@@ -1334,7 +1429,7 @@ static bool process_files(int argi, int argc, char **argv) {
 					}
 				} else if(strncasecmp(cs+2, "MEMORY=", 7) == 0) {
 					sizeof_memory = strtozs(cs+9, &s, 10);
-					cs = skipspace(s);
+					cs = s ? skipspace(s) : cs;
 					if(*cs == '}') {
 						if(memory) {
 							free(memory);
@@ -1350,8 +1445,38 @@ static bool process_files(int argi, int argc, char **argv) {
 						cs++;
 						continue;
 					}
-				} else if(strncasecmp(cs+2, "NOCASE", 6) == 0) {
+				} else if(strncasecmp(cs+2, "COMMENT=", 8) == 0) {
 					s = (char *)skipspace(cs+10);
+					for(cs = s; isgraph(*cs) && (*cs != '}');) {
+						cs++;
+					}
+					if(*cs == '}') {
+						comment_char = get_named_character(cs - s, s, '\0');
+						cs++;
+						continue;
+					}
+				} else if(strncasecmp(cs+2, "DELIMITER=", 10) == 0) {
+					s = (char *)skipspace(cs+12);
+					for(cs = s; isgraph(*cs) && (*cs != '}');) {
+						cs++;
+					}
+					if(*cs == '}') {
+						delimiter_char = get_named_character(cs - s, s, '\0');
+						cs++;
+						continue;
+					}
+				} else if(strncasecmp(cs+2, "LABEL=", 6) == 0) {
+					s = (char *)skipspace(cs+8);
+					for(cs = s; isgraph(*cs) && (*cs != '}');) {
+						cs++;
+					}
+					if(*cs == '}') {
+						label_char = get_named_character(cs - s, s, label_char);
+						cs++;
+						continue;
+					}
+				} else if(strncasecmp(cs+2, "NOCASE", 6) == 0) {
+					cs = (char *)skipspace(cs+8);
 					if(*cs == '}') {
 						equal = nocase_equal;
 						cs++;
@@ -1359,13 +1484,11 @@ static bool process_files(int argi, int argc, char **argv) {
 					}
 				}
 			} else {
-				failed = failed || !(cs = process_directive(cs+1));
-				if(cs) {
-					cs = skipspace(cs);
-					if(*cs == '}') {
-						cs++;
-						continue;
-					}
+				cs = process_directive(cs+1);
+				cs = skipspace(cs);
+				if(*cs == '}') {
+					cs++;
+					continue;
 				}
 			}
 			do {
@@ -1380,6 +1503,9 @@ static bool process_files(int argi, int argc, char **argv) {
 			break;
 		}
 		failed = failed || !(cs = process(cs));
+		if(!cs) {
+			break;
+		}
 	}
 
 	return failed;
@@ -1578,6 +1704,7 @@ static struct optget options[] = {
 	{  2, "    --version",           "display version and exit" },
 	{  3, "    --license",           "display license and exit" },
 	{  4, "    --readme",            "display readme and exit" },
+	{  8, "-e, --error FILE",        "output errors to FILE" },
 	{  9, "-o, --output FILE",       "output to FILE" },
 	{ 10, "-l, --listing FILE",      "write listing to FILE" },
 #ifdef EVAL_TRACE
@@ -1627,6 +1754,9 @@ main(
 			case 4:
 				readme(argv[0]);
 				return 0;
+			case 8:
+				failed = failed || !(errout = openout(argv[argi], errout));
+				break;
 			case 9:
 				outfile = argv[argi];
 				break;
