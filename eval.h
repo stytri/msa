@@ -171,6 +171,30 @@ static const char *eval_tokens[] = {
 
 //------------------------------------------------------------------------------
 
+#define EVAL__IMMEDIATE_SIZE(EVAL__IMMEDIATE_SIZE_limit) \
+	(1 \
+	+ ((EVAL__IMMEDIATE_SIZE_limit) > (1ull <<  8)) \
+	+ ((EVAL__IMMEDIATE_SIZE_limit) > (1ull << 16)) \
+	+ ((EVAL__IMMEDIATE_SIZE_limit) > (1ull << 24)) \
+	)
+
+static inline void eval__save_immediate(uint64_t a, uint8_t b[], int n) {
+	for(int i = 0; i < n; i++) {
+		b[i] = (uint8_t)(a >> (i * 8));
+	}
+	return;
+}
+
+static inline uint64_t eval__load_immediate(uint8_t const b[], int n) {
+	uint64_t a = 0;
+	for(int i = 0; i < n; i++) {
+		a |= (uint64_t)b[i] << (i * 8);
+	}
+	return a;
+}
+
+//------------------------------------------------------------------------------
+
 static const char *eval_error_message(int e) {
 	switch(e) {
 	case EVAL_ERROR_TOO_LONG:
@@ -196,6 +220,12 @@ static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 		switch(o) {
 		case EVAL_END:
 			return NULL;
+		case EVAL_IF:
+		case EVAL_ELSE:
+			a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+			cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+			e->trace("{%u}", (unsigned)a);
+			return cs;
 		case EVAL_VARIANT:
 			o = *cs++ % N_EVAL_VARIANTS;
 			e->trace("%u{%c:0x%"PRIx64"}", (unsigned)o, (int)e->v[o].type, e->v[o].u);
@@ -205,11 +235,9 @@ static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 			e->trace("%u{%c:0x%"PRIx64"}", (unsigned)o, (int)e->v[o].type, *e->symp(e->v[o].u));
 			return cs;
 		case EVAL_FUNCTION:
-			a = *cs++;
-			if(N_FUNCTIONS > 256) {
-				a |= *cs++ << 8;
-			}
-			e->trace("%u", (unsigned)a);
+			a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_FUNCTIONS));
+			cs += EVAL__IMMEDIATE_SIZE(N_FUNCTIONS);
+			e->trace("{%u}", (unsigned)a);
 			return cs;
 		case EVAL_CONSTANT8_COMPLEMENT:
 			x = ~x; // fallthrough
@@ -457,9 +485,15 @@ static STRING eval_tokenize(
 			}
 		case '?':
 			if(state > 1) {
-				((uint8_t *)t.str)[t.len++] = EVAL_CONDITION_IF;
-				state = 1;
-				continue;
+				if(t.len < (token.len - EVAL__IMMEDIATE_SIZE(N_TOKENS))) {
+					((uint8_t *)t.str)[t.len++] = EVAL_CONDITION_IF;
+					eval__save_immediate(0, &((uint8_t *)t.str)[t.len], EVAL__IMMEDIATE_SIZE(N_TOKENS));
+					t.len += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
+				return STRING(0, NULL);
 			}
 			((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_IS;
 			continue;
@@ -477,9 +511,15 @@ static STRING eval_tokenize(
 			default :
 				unget(c, p);
 				if(state > 1) {
-					((uint8_t *)t.str)[t.len++] = EVAL_CONDITION_ELSE;
-					state = 1;
-					continue;
+					if(t.len < (token.len - EVAL__IMMEDIATE_SIZE(N_TOKENS))) {
+						((uint8_t *)t.str)[t.len++] = EVAL_CONDITION_ELSE;
+						eval__save_immediate(0, &((uint8_t *)t.str)[t.len], EVAL__IMMEDIATE_SIZE(N_TOKENS));
+						t.len += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+						state = 1;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
+					return STRING(0, NULL);
 				}
 				((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_NOT;
 				continue;
@@ -983,21 +1023,19 @@ static STRING eval_tokenize(
 				}
 				int i = getfn(n, fn);
 				if(i >= 0) {
-					if(t.len >= (token.len - (N_FUNCTIONS > 256) - 1)) {
-						EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
-						return STRING(0, NULL);
-					}
-					((uint8_t *)t.str)[t.len++] = EVAL_FUNCTION;
-					((uint8_t *)t.str)[t.len++] = i & 255;
-					if(N_FUNCTIONS > 256) {
-						((uint8_t *)t.str)[t.len++] = (i >> 8) & 255;
-					}
-					if(state < 2) {
-						state = 2;
+					if(t.len < (token.len - EVAL__IMMEDIATE_SIZE(N_FUNCTIONS))) {
+						((uint8_t *)t.str)[t.len++] = EVAL_FUNCTION;
+						eval__save_immediate(i, &((uint8_t *)t.str)[t.len], EVAL__IMMEDIATE_SIZE(N_FUNCTIONS));
+						t.len += EVAL__IMMEDIATE_SIZE(N_FUNCTIONS);
+						if(state < 2) {
+							state = 2;
+							continue;
+						}
+						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 						continue;
 					}
-					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
-					continue;
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
+					return STRING(0, NULL);
 				}
 				i = getconst(n, fn, &u);
 				if(i >= 0) {
@@ -1080,10 +1118,8 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	case EVAL_FUNCTION:
 		EVAL_TOKENPRINT(cs, e);
 		cs++;
-		a = *cs++;
-		if(N_FUNCTIONS > 256) {
-			a |= *cs++ << 8;
-		}
+		a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_FUNCTIONS));
+		cs += EVAL__IMMEDIATE_SIZE(N_FUNCTIONS);
 		l = e ? e->func(e, a) : 0;
 		*csp = cs;
 		return l;
@@ -1404,7 +1440,10 @@ static uint64_t eval_alternation(uint8_t const *cs, EVAL *e, uint8_t const **csp
 	uint64_t l = eval_condition(cs, cond ? e : NULL, csp);
 	if(*(cs = *csp) == EVAL_CONDITION_ELSE) {
 		EVAL_TOKENPRINT(cs, e);
-		uint64_t r = eval_condition(cs + 1, !cond ? e : NULL, csp);
+		cs++;
+		uint64_t a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+		cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+		uint64_t r = eval_condition(cs, !cond ? e : NULL, csp);
 		if(!cond) {
 			return r;
 		}
@@ -1416,7 +1455,10 @@ static uint64_t eval_condition(uint8_t const *cs, EVAL *e, uint8_t const **csp) 
 	uint64_t l = eval_boolean(cs, e, csp);
 	while(*(cs = *csp) == EVAL_CONDITION_IF) {
 		EVAL_TOKENPRINT(cs, e);
-		l = eval_alternation(cs + 1, e, csp, l);
+		cs++;
+		uint64_t a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+		cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+		l = eval_alternation(cs, e, csp, l);
 	}
 	return l;
 }
