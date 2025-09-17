@@ -88,6 +88,9 @@ static uint64_t eval_nul_tag(bool, uint64_t) {
 \
 	ENUM(ASSIGN, "=") \
 \
+	ENUM(CONDITION_IF, "?") \
+	ENUM(CONDITION_ELSE, "!") \
+\
 	ENUM(BOOLEAN_IS, "?") \
 	ENUM(BOOLEAN_NOT, "!") \
 	ENUM(BOOLEAN_OR, "||") \
@@ -100,6 +103,8 @@ static uint64_t eval_nul_tag(bool, uint64_t) {
 	ENUM(RELATION_MORE_THAN, ">") \
 	ENUM(RELATION_MORE_THAN_OR_EQUAL, ">=") \
 \
+	ENUM(BINARY_COMPLIMENT, "~") \
+	ENUM(BINARY_MSB, "|") \
 	ENUM(BINARY_OR, "|") \
 	ENUM(BINARY_AND, "&") \
 	ENUM(BINARY_XOR, "^") \
@@ -107,8 +112,8 @@ static uint64_t eval_nul_tag(bool, uint64_t) {
 	ENUM(BINARY_RIGHT_SHIFT, ">>") \
 	ENUM(BINARY_LEFT_ROTATE, "<<>") \
 	ENUM(BINARY_RIGHT_ROTATE, "<>>") \
-	ENUM(BINARY_COMPLIMENT, "~") \
 \
+	ENUM(ARITHMETIC_NEGATE, "-") \
 	ENUM(ARITHMETIC_PLUS, "+") \
 	ENUM(ARITHMETIC_MINUS, "-") \
 	ENUM(ARITHMETIC_MULTIPLY, "*") \
@@ -126,6 +131,8 @@ static uint64_t eval_nul_tag(bool, uint64_t) {
 \
 	ENUM(ERROR_TOO_LONG,    "expression too long") \
 	ENUM(ERROR_CHARACTER,   "invalid character in expression") \
+	ENUM(ERROR_OPERATOR,    "unexpected operator in expression") \
+	ENUM(ERROR_OPERAND,     "unexpected operand in expression") \
 	ENUM(ERROR_PARENTHESIS, "expression parenthesis mismatch") \
 	ENUM(ERROR_FUNCTION,    "invalid function name") \
 	ENUM(ERROR_INVALID,     "invalid operand") \
@@ -168,6 +175,8 @@ static const char *eval_error_message(int e) {
 	switch(e) {
 	case EVAL_ERROR_TOO_LONG:
 	case EVAL_ERROR_CHARACTER:
+	case EVAL_ERROR_OPERATOR:
+	case EVAL_ERROR_OPERAND:
 	case EVAL_ERROR_PARENTHESIS:
 	case EVAL_ERROR_FUNCTION:
 	case EVAL_ERROR_INVALID:
@@ -368,7 +377,7 @@ static STRING eval_tokenize(
 	if((t.len == 0) || (((uint8_t *)t.str)[t.len - 1] != (EVAL_TOKENIZE__error))) { \
 		((uint8_t *)t.str)[t.len++] = EVAL_TOKENIZE__error; \
 	} else do {;} while(0)
-	for(int paren = 0, c;;) {
+	for(int paren = 0, state = 1, c;;) {
 		while((c = get(p)) && !isgraph(c)) {
 			if(c == '\n') {
 				++*linenop;
@@ -388,41 +397,134 @@ static STRING eval_tokenize(
 				}
 			}
 			continue;
-		case ',': ((uint8_t *)t.str)[t.len++] = EVAL_SEQUENCE; continue;
-		case '(': ((uint8_t *)t.str)[t.len++] = EVAL_PARENTHESIS_LEFT; paren++; continue;
-		case ')':
-			if(paren == 0) {
-				EVAL_TOKENIZE__ERROR(EVAL_ERROR_PARENTHESIS);
+		case ',':
+			if(state > 1) {
+				((uint8_t *)t.str)[t.len++] = EVAL_SEQUENCE;
+				state = 1;
 				continue;
 			}
-			((uint8_t *)t.str)[t.len++] = EVAL_PARENTHESIS_RIGHT;
-			paren--;
+			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+			continue;
+		case '(':
+			if(state < 2) {
+				paren++;
+				((uint8_t *)t.str)[t.len++] = EVAL_PARENTHESIS_LEFT;
+				continue;
+			}
+			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+			continue;
+		case ')':
+			if(state > 1) {
+				if(paren > 0) {
+					paren--;
+					((uint8_t *)t.str)[t.len++] = EVAL_PARENTHESIS_RIGHT;
+					state = 2;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_PARENTHESIS);
+				state = 2;
+				continue;
+			}
+			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
 			continue;
 		case '=':
 			c = get(p);
 			switch(c) {
-			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_RELATION_EQUAL; continue;
-			case '@': ((uint8_t *)t.str)[t.len++] = EVAL_LOAD; continue;
-			default : ((uint8_t *)t.str)[t.len++] = EVAL_ASSIGN; unget(c, p); continue;
+			case '=':
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_EQUAL;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
+			case '@':
+				if(state < 2) {
+					((uint8_t *)t.str)[t.len++] = EVAL_LOAD;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
+			default :
+				unget(c, p);
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_ASSIGN;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
 			}
-		case '?': ((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_IS; continue;
+		case '?':
+			if(state > 1) {
+				((uint8_t *)t.str)[t.len++] = EVAL_CONDITION_IF;
+				state = 1;
+				continue;
+			}
+			((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_IS;
+			continue;
 		case '!':
 			c = get(p);
 			switch(c) {
-			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_RELATION_NOT_EQUAL; continue;
-			default : ((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_NOT; unget(c, p); continue;
+			case '=':
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_NOT_EQUAL;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
+			default :
+				unget(c, p);
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_CONDITION_ELSE;
+					state = 1;
+					continue;
+				}
+				((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_NOT;
+				continue;
 			}
 		case '&':
 			c = get(p);
 			switch(c) {
-			case '&': ((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_AND; continue;
-			default : ((uint8_t *)t.str)[t.len++] = EVAL_BINARY_AND; unget(c, p); continue;
+			case '&':
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_AND;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
+			default :
+				unget(c, p);
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_BINARY_AND;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
 			}
 		case '|':
 			c = get(p);
 			switch(c) {
-			case '|': ((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_OR; continue;
-			default : ((uint8_t *)t.str)[t.len++] = EVAL_BINARY_OR; unget(c, p); continue;
+			case '|':
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_OR;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
+			default :
+				unget(c, p);
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_BINARY_OR;
+					state = 1;
+					continue;
+				}
+				((uint8_t *)t.str)[t.len++] = EVAL_BINARY_MSB;
+				continue;
 			}
 		case '<':
 			c = get(p);
@@ -430,42 +532,176 @@ static STRING eval_tokenize(
 			case '<':
 				c = get(p);
 				switch(c) {
-				case '>': ((uint8_t *)t.str)[t.len++] = EVAL_BINARY_LEFT_ROTATE; continue;
-				default : ((uint8_t *)t.str)[t.len++] = EVAL_BINARY_LEFT_SHIFT; unget(c, p); continue;
+				case '>':
+					if(state > 1) {
+						((uint8_t *)t.str)[t.len++] = EVAL_BINARY_LEFT_ROTATE;
+						state = 1;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+					continue;
+				default :
+					unget(c, p);
+					if(state > 1) {
+						((uint8_t *)t.str)[t.len++] = EVAL_BINARY_LEFT_SHIFT;
+						state = 1;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+					continue;
 				}
 			case '>':
 				c = get(p);
 				switch(c) {
-				case '>': ((uint8_t *)t.str)[t.len++] = EVAL_BINARY_RIGHT_ROTATE; continue;
-				default : ((uint8_t *)t.str)[t.len++] = EVAL_RELATION_NOT_EQUAL; unget(c, p); continue;
+				case '>':
+					if(state > 1) {
+						((uint8_t *)t.str)[t.len++] = EVAL_BINARY_RIGHT_ROTATE;
+						state = 1;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+					continue;
+				default :
+					unget(c, p);
+					if(state > 1) {
+						((uint8_t *)t.str)[t.len++] = EVAL_RELATION_NOT_EQUAL;
+						state = 1;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+					continue;
 				}
-			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_RELATION_LESS_THAN_OR_EQUAL; continue;
-			default : ((uint8_t *)t.str)[t.len++] = EVAL_RELATION_LESS_THAN; unget(c, p); continue;
+			case '=':
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_LESS_THAN_OR_EQUAL;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
+			default :
+				unget(c, p);
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_LESS_THAN;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
 			}
 		case '>':
 			c = get(p);
 			switch(c) {
-			case '>': ((uint8_t *)t.str)[t.len++] = EVAL_BINARY_RIGHT_SHIFT; continue;
-			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_RELATION_MORE_THAN_OR_EQUAL; continue;
-			default : ((uint8_t *)t.str)[t.len++] = EVAL_RELATION_MORE_THAN; unget(c, p); continue;
+			case '>':
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_BINARY_RIGHT_SHIFT;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
+			case '=':
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_MORE_THAN_OR_EQUAL;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
+			default :
+				unget(c, p);
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_MORE_THAN;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
 			}
-		case '^': ((uint8_t *)t.str)[t.len++] = EVAL_BINARY_XOR; continue;
-		case '~': ((uint8_t *)t.str)[t.len++] = EVAL_BINARY_COMPLIMENT; continue;
+		case '^':
+			if(state > 1) {
+				((uint8_t *)t.str)[t.len++] = EVAL_BINARY_XOR;
+				state = 1;
+				continue;
+			}
+			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+			continue;
+		case '~':
+			if(state < 2) {
+				((uint8_t *)t.str)[t.len++] = EVAL_BINARY_COMPLIMENT;
+				continue;
+			}
+			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+			continue;
 		case '+':
 			c = get(p);
 			switch(c) {
-			case '+': ((uint8_t *)t.str)[t.len++] = EVAL_INCREMENT; continue;
-			default : ((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_PLUS; unget(c, p); continue;
+			case '+':
+				if(state > 2) {
+					((uint8_t *)t.str)[t.len++] = EVAL_INCREMENT;
+					state = 2;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				state = 2;
+				continue;
+			default :
+				unget(c, p);
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_PLUS;
+					state = 1;
+					continue;
+				}
+//              REDUNDANT: ELIDED
+//				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_PLUS;
+				continue;
 			}
 		case '-':
 			c = get(p);
 			switch(c) {
-			case '-': ((uint8_t *)t.str)[t.len++] = EVAL_DECREMENT; continue;
-			default : ((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_MINUS; unget(c, p); continue;
+			case '-':
+				if(state > 2) {
+					((uint8_t *)t.str)[t.len++] = EVAL_DECREMENT;
+					state = 2;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				state = 2;
+				continue;
+			default :
+				unget(c, p);
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_MINUS;
+					state = 1;
+					continue;
+				}
+				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_NEGATE;
+				continue;
 			}
-		case '*': ((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_MULTIPLY; continue;
-		case '/': ((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_DIVIDE; continue;
-		case '%': ((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_MODULO; continue;
+		case '*':
+			if(state > 1) {
+				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_MULTIPLY;
+				state = 1;
+				continue;
+			}
+			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+			continue;
+		case '/':
+			if(state > 1) {
+				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_DIVIDE;
+				state = 1;
+				continue;
+			}
+			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+			continue;
+		case '%':
+			if(state > 1) {
+				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_MODULO;
+				state = 1;
+				continue;
+			}
+			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+			continue;
 		case '$':
 			c = get(p);
 			if(isdigit(c)) {
@@ -476,8 +712,14 @@ static STRING eval_tokenize(
 				c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
 				((uint8_t *)t.str)[t.len++] = EVAL_VARIANT;
 				((uint8_t *)t.str)[t.len++] = c;
+				if(state < 2) {
+					state = 3;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 				continue;
-			} else switch(c) {
+			}
+			switch(c) {
 			case '?':
 				c = get(p);
 				if(isdigit(c)) {
@@ -488,13 +730,31 @@ static STRING eval_tokenize(
 					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
 					((uint8_t *)t.str)[t.len++] = EVAL_VARIANT_TYPE;
 					((uint8_t *)t.str)[t.len++] = c;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				break;
-			case '&': ((uint8_t *)t.str)[t.len++] = EVAL_TAG_AND; continue;
-			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_TAG_SET; continue;
+			case '&':
+				if(state < 2) {
+					((uint8_t *)t.str)[t.len++] = EVAL_TAG_AND;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
+				continue;
+			case '=':
+				if(state < 2) {
+					((uint8_t *)t.str)[t.len++] = EVAL_TAG_SET;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
+				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
+			state = 1;
 			continue;
 		case '@':
 			c = get(p);
@@ -506,8 +766,14 @@ static STRING eval_tokenize(
 				c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
 				((uint8_t *)t.str)[t.len++] = EVAL_INDIRECT;
 				((uint8_t *)t.str)[t.len++] = c;
+				if(state < 2) {
+					state = 2;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 				continue;
-			} else switch(c) {
+			}
+			switch(c) {
 			case '&':
 				c = get(p);
 				if(isdigit(c)) {
@@ -518,12 +784,24 @@ static STRING eval_tokenize(
 					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
 					((uint8_t *)t.str)[t.len++] = EVAL_INDIRECT_TAG_AND;
 					((uint8_t *)t.str)[t.len++] = c;
+					if(state < 2) {
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				break;
-			case '=': ((uint8_t *)t.str)[t.len++] = EVAL_EMIT; continue;
+			case '=':
+				if(state > 1) {
+					((uint8_t *)t.str)[t.len++] = EVAL_EMIT;
+					state = 1;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
+			state = 1;
 			continue;
 		case '\'':
 			c = get(p);
@@ -544,6 +822,11 @@ static STRING eval_tokenize(
 			c = get(p);
 			if(c != '\'') {
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
+				if(state < 2) {
+					state = 2;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 				continue;
 			}
 			goto case_uint;
@@ -553,6 +836,11 @@ static STRING eval_tokenize(
 		case_uint:
 				if(u <= 63u) {
 					((uint8_t *)t.str)[t.len++] = EVAL_SMALLINT | u;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				if((u & (u - 1)) == 0) {
@@ -561,6 +849,11 @@ static STRING eval_tokenize(
 						b++;
 					}
 					((uint8_t *)t.str)[t.len++] = EVAL_MASK_BIT | b;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				if((u & (u + 1)) == 0) {
@@ -569,6 +862,11 @@ static STRING eval_tokenize(
 						b++;
 					}
 					((uint8_t *)t.str)[t.len++] = EVAL_BIT_MASK | b;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				int      q = (~u < u);
@@ -580,6 +878,11 @@ static STRING eval_tokenize(
 					}
 					((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT8_COMPLEMENT : EVAL_CONSTANT8;
 					((uint8_t *)t.str)[t.len++] = x & 255u;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				if(x <= UINT16_MAX) {
@@ -590,6 +893,11 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT16_COMPLEMENT : EVAL_CONSTANT16;
 					((uint8_t *)t.str)[t.len++] =  x       & 255u;
 					((uint8_t *)t.str)[t.len++] = (x >> 8) & 255u;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				if(x <= UINT32_MAX) {
@@ -602,6 +910,11 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = (x >>  8) & 255u;
 					((uint8_t *)t.str)[t.len++] = (x >> 16) & 255u;
 					((uint8_t *)t.str)[t.len++] = (x >> 24) & 255u;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				if(t.len >= (token.len - 8)) {
@@ -617,6 +930,11 @@ static STRING eval_tokenize(
 				((uint8_t *)t.str)[t.len++] = (x >> 40) & 255u;
 				((uint8_t *)t.str)[t.len++] = (x >> 48) & 255u;
 				((uint8_t *)t.str)[t.len++] = (x >> 56) & 255u;
+				if(state < 2) {
+					state = 2;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 				continue;
 			}
 			if(isalpha(c) || (c == '_') || (c == '`')) {
@@ -638,14 +956,29 @@ static STRING eval_tokenize(
 				unget(c, p);
 				if((strcmp(fn, "TRUE") == 0) || (strcmp(fn, "true") == 0)) {
 					((uint8_t *)t.str)[t.len++] = EVAL_SMALLINT | 1;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				if((strcmp(fn, "FALSE") == 0) || (strcmp(fn, "false") == 0)) {
 					((uint8_t *)t.str)[t.len++] = EVAL_SMALLINT | 0;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				if((strcmp(fn, "INVALID") == 0) || (strcmp(fn, "invalid") == 0)) {
 					((uint8_t *)t.str)[t.len++] = EVAL_ERROR_INVALID;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				int i = getfn(n, fn);
@@ -659,6 +992,11 @@ static STRING eval_tokenize(
 					if(N_FUNCTIONS > 256) {
 						((uint8_t *)t.str)[t.len++] = (i >> 8) & 255;
 					}
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
 				i = getconst(n, fn, &u);
@@ -666,10 +1004,12 @@ static STRING eval_tokenize(
 					goto case_uint;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_FUNCTION);
+				state = 2;
 				continue;
 			}
 			if(c != end) {
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
+				state = 2;
 				continue;
 			}
 			// fallthrough
@@ -838,7 +1178,7 @@ static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_unary(cs + 1, e, csp);
 		return !l;
-	case EVAL_BINARY_OR:
+	case EVAL_BINARY_MSB:
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_unary(cs + 1, e, csp);
 		l = msbit(l);
@@ -847,14 +1187,14 @@ static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_unary(cs + 1, e, csp);
 		return ~l;
-	case EVAL_ARITHMETIC_MINUS:
+	case EVAL_ARITHMETIC_NEGATE:
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_unary(cs + 1, e, csp);
 		return -l;
-	case EVAL_ARITHMETIC_PLUS:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
-		return l;
+//	case EVAL_ARITHMETIC_PLUS:
+//		EVAL_TOKENPRINT(cs, e);
+//		l = eval_unary(cs + 1, e, csp);
+//		return l;
 	case EVAL_TAG_AND:
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_unary(cs + 1, e, csp);
@@ -1062,7 +1402,7 @@ static uint64_t eval_condition(uint8_t const *cs, EVAL *e, uint8_t const **csp);
 
 static uint64_t eval_alternation(uint8_t const *cs, EVAL *e, uint8_t const **csp, uint64_t cond) {
 	uint64_t l = eval_condition(cs, cond ? e : NULL, csp);
-	if(*(cs = *csp) == EVAL_BOOLEAN_NOT) {
+	if(*(cs = *csp) == EVAL_CONDITION_ELSE) {
 		EVAL_TOKENPRINT(cs, e);
 		uint64_t r = eval_condition(cs + 1, !cond ? e : NULL, csp);
 		if(!cond) {
@@ -1074,7 +1414,7 @@ static uint64_t eval_alternation(uint8_t const *cs, EVAL *e, uint8_t const **csp
 
 static uint64_t eval_condition(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	uint64_t l = eval_boolean(cs, e, csp);
-	while(*(cs = *csp) == EVAL_BOOLEAN_IS) {
+	while(*(cs = *csp) == EVAL_CONDITION_IF) {
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_alternation(cs + 1, e, csp, l);
 	}
