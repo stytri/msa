@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  3.5.0
+#	define VERSION  3.6.0
 #endif
 //
 // Build with https://github.com/stytri/m
