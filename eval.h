@@ -1437,15 +1437,38 @@ static uint64_t eval_boolean(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 static uint64_t eval_condition(uint8_t const *cs, EVAL *e, uint8_t const **csp);
 
 static uint64_t eval_alternation(uint8_t const *cs, EVAL *e, uint8_t const **csp, uint64_t cond) {
-	uint64_t l = eval_condition(cs, cond ? e : NULL, csp);
-	if(*(cs = *csp) == EVAL_CONDITION_ELSE) {
+	uint8_t const *ct = cs;
+	uint64_t a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+	cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+	uint64_t l = 0;
+	if(a && !cond) {
+		*csp = cs += a;
+	} else {
+		l = eval_condition(cs, cond ? e : NULL, csp);
+		cs = *csp;
+		if(!a) {
+			a = cs - ct - EVAL__IMMEDIATE_SIZE(N_TOKENS);
+			eval__save_immediate(a, (uint8_t *)ct, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+		}
+	}
+	if(*cs == EVAL_CONDITION_ELSE) {
 		EVAL_TOKENPRINT(cs, e);
 		cs++;
-		uint64_t a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+		ct = cs;
+		a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
 		cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
-		uint64_t r = eval_condition(cs, !cond ? e : NULL, csp);
-		if(!cond) {
-			return r;
+		if(a && cond) {
+			*csp = cs += a;
+		} else {
+			uint64_t r = eval_condition(cs, !cond ? e : NULL, csp);
+			cs = *csp;
+			if(!a) {
+				a = cs - ct - EVAL__IMMEDIATE_SIZE(N_TOKENS);
+				eval__save_immediate(a, (uint8_t *)ct, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+			}
+			if(!cond) {
+				return r;
+			}
 		}
 	}
 	return l;
@@ -1455,10 +1478,7 @@ static uint64_t eval_condition(uint8_t const *cs, EVAL *e, uint8_t const **csp) 
 	uint64_t l = eval_boolean(cs, e, csp);
 	while(*(cs = *csp) == EVAL_CONDITION_IF) {
 		EVAL_TOKENPRINT(cs, e);
-		cs++;
-		uint64_t a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
-		cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
-		l = eval_alternation(cs, e, csp, l);
+		l = eval_alternation(cs + 1, e, csp, l);
 	}
 	return l;
 }
