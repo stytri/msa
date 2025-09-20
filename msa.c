@@ -851,11 +851,15 @@ static STRING compile_expression(void *p) {
 		),
 		&lineno
 	);
-	n_token += expr.len;
-	int e = eval_verify_expression(expr.str);
-	if(e) {
-		report_source_error(eval_error_message(e));
-		return STRING(0, NULL);
+	if(expr.len > 0) {
+		n_token += expr.len;
+		int e = eval_verify_expression(expr.str);
+		if(e) {
+			report_source_error(eval_error_message(e));
+			return STRING(0, "");
+		}
+	} else {
+		report_source_error(strerror(errno));
 	}
 	return expr;
 }

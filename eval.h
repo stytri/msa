@@ -129,7 +129,6 @@ static uint64_t eval_nul_tag(bool, uint64_t) {
 	ENUM(TAG_AND, "$&") \
 	ENUM(TAG_SET, "$=") \
 \
-	ENUM(ERROR_TOO_LONG,    "expression too long") \
 	ENUM(ERROR_CHARACTER,   "invalid character in expression") \
 	ENUM(ERROR_OPERATOR,    "unexpected operator in expression") \
 	ENUM(ERROR_OPERAND,     "unexpected operand in expression") \
@@ -196,18 +195,10 @@ static inline uint64_t eval__load_immediate(uint8_t const b[], int n) {
 //------------------------------------------------------------------------------
 
 static const char *eval_error_message(int e) {
-	switch(e) {
-	case EVAL_ERROR_TOO_LONG:
-	case EVAL_ERROR_CHARACTER:
-	case EVAL_ERROR_OPERATOR:
-	case EVAL_ERROR_OPERAND:
-	case EVAL_ERROR_PARENTHESIS:
-	case EVAL_ERROR_FUNCTION:
-	case EVAL_ERROR_INVALID:
+	if((e >= EVAL_ERROR_CHARACTER) || (e <= EVAL_ERROR_INVALID)) {
 		return eval_tokens[e];
-	default:
-		return "invalid expression";
 	}
+	return "invalid expression";
 }
 
 #ifdef EVAL_TRACE
@@ -412,8 +403,8 @@ static STRING eval_tokenize(
 			}
 		}
 		if(t.len >= token.len) {
-			EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
-			return STRING(0, NULL);
+			errno = ENOMEM;
+			return STRING(0, "");
 		}
 		switch(c) {
 			uint64_t u;
@@ -492,8 +483,8 @@ static STRING eval_tokenize(
 					state = 1;
 					continue;
 				}
-				EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
-				return STRING(0, NULL);
+				errno = ENOMEM;
+				return STRING(0, "");
 			}
 			((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_IS;
 			continue;
@@ -518,8 +509,8 @@ static STRING eval_tokenize(
 						state = 1;
 						continue;
 					}
-					EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
-					return STRING(0, NULL);
+					errno = ENOMEM;
+					return STRING(0, "");
 				}
 				((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_NOT;
 				continue;
@@ -746,8 +737,8 @@ static STRING eval_tokenize(
 			c = get(p);
 			if(isdigit(c)) {
 				if(t.len >= (token.len - 1)) {
-					EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
-					return STRING(0, NULL);
+					errno = ENOMEM;
+					return STRING(0, "");
 				}
 				c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
 				((uint8_t *)t.str)[t.len++] = EVAL_VARIANT;
@@ -764,8 +755,8 @@ static STRING eval_tokenize(
 				c = get(p);
 				if(isdigit(c)) {
 					if(t.len >= (token.len - 1)) {
-						EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
-						return STRING(0, NULL);
+						errno = ENOMEM;
+						return STRING(0, "");
 					}
 					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
 					((uint8_t *)t.str)[t.len++] = EVAL_VARIANT_TYPE;
@@ -800,8 +791,8 @@ static STRING eval_tokenize(
 			c = get(p);
 			if(isdigit(c)) {
 				if(t.len >= (token.len - 1)) {
-					EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
-					return STRING(0, NULL);
+					errno = ENOMEM;
+					return STRING(0, "");
 				}
 				c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
 				((uint8_t *)t.str)[t.len++] = EVAL_INDIRECT;
@@ -818,8 +809,8 @@ static STRING eval_tokenize(
 				c = get(p);
 				if(isdigit(c)) {
 					if(t.len >= (token.len - 1)) {
-						EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
-						return STRING(0, NULL);
+						errno = ENOMEM;
+						return STRING(0, "");
 					}
 					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
 					((uint8_t *)t.str)[t.len++] = EVAL_INDIRECT_TAG_AND;
@@ -914,7 +905,7 @@ static STRING eval_tokenize(
 				if(x <= UINT8_MAX) {
 					if(t.len >= token.len) {
 						errno = ENOMEM;
-						return STRING(0, NULL);
+						return STRING(0, "");
 					}
 					((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT8_COMPLEMENT : EVAL_CONSTANT8;
 					((uint8_t *)t.str)[t.len++] = x & 255u;
@@ -928,7 +919,7 @@ static STRING eval_tokenize(
 				if(x <= UINT16_MAX) {
 					if(t.len >= (token.len - 2)) {
 						errno = ENOMEM;
-						return STRING(0, NULL);
+						return STRING(0, "");
 					}
 					((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT16_COMPLEMENT : EVAL_CONSTANT16;
 					((uint8_t *)t.str)[t.len++] =  x       & 255u;
@@ -943,7 +934,7 @@ static STRING eval_tokenize(
 				if(x <= UINT32_MAX) {
 					if(t.len >= (token.len - 4)) {
 						errno = ENOMEM;
-						return STRING(0, NULL);
+						return STRING(0, "");
 					}
 					((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT32_COMPLEMENT : EVAL_CONSTANT32;
 					((uint8_t *)t.str)[t.len++] =  x        & 255u;
@@ -959,7 +950,7 @@ static STRING eval_tokenize(
 				}
 				if(t.len >= (token.len - 8)) {
 					errno = ENOMEM;
-					return STRING(0, NULL);
+					return STRING(0, "");
 				}
 				((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT64_COMPLEMENT : EVAL_CONSTANT64;
 				((uint8_t *)t.str)[t.len++] =  x        & 255u;
@@ -980,14 +971,18 @@ static STRING eval_tokenize(
 			if(isalpha(c) || (c == '_') || (c == '`')) {
 				size_t n = 1;
 				char   fn[65] = { c };
+				bool   noerr = true;
 				c = get(p);
 				for(bool quote = false;
 					(quote && isgraph(c)) || isalnum(c) || (c == '_') || (c == '`');
 					c = get(p)
 				) {
 					if(n > 63) {
-						EVAL_TOKENIZE__ERROR(EVAL_ERROR_FUNCTION);
-						return STRING(0, NULL);
+						if(noerr) {
+							EVAL_TOKENIZE__ERROR(EVAL_ERROR_FUNCTION);
+							noerr = false;
+						}
+						continue;
 					}
 					fn[n++] = c;
 					quote = !quote && (c == '`');
@@ -1034,8 +1029,8 @@ static STRING eval_tokenize(
 						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 						continue;
 					}
-					EVAL_TOKENIZE__ERROR(EVAL_ERROR_TOO_LONG);
-					return STRING(0, NULL);
+					errno = ENOMEM;
+					return STRING(0, "");
 				}
 				i = getconst(n, fn, &u);
 				if(i >= 0) {
