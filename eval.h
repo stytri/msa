@@ -409,6 +409,7 @@ static STRING eval_tokenize(
 		switch(c) {
 			uint64_t u;
 		case ';':
+		case '#':
 			while((c = get(p))) {
 				if(c == '\n') {
 					++*linenop;
