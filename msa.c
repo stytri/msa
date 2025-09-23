@@ -872,7 +872,7 @@ static char const *process_directive(char const *cs) {
 	STRING rpl;
 	STRING xpr;
 	VALUE  val;
-	uint64_t st = 0;
+	uint64_t st = 0, mt = ~0;
 	size_t n = 0;
 	for(cs = skipspace(cs); *cs == '{'; ) {
 		n = strcspn(cs, "}");
@@ -882,13 +882,15 @@ static char const *process_directive(char const *cs) {
 		} else if(strncmp(cs, "{delimiter}", n) == 0) {
 			st |= DELIMITER_SYMBOL;
 		} else if(strncmp(cs, "{prefix}", n) == 0) {
-			st &= ~POSTFIX_SYMBOL;
-			st &= ~NOFIX_SYMBOL;
+			mt &= ~POSTFIX_SYMBOL;
+			mt &= ~NOFIX_SYMBOL;
 		} else if(strncmp(cs, "{postfix}", n) == 0) {
-			st &= ~NOFIX_SYMBOL;
+			mt &= ~NOFIX_SYMBOL;
+			mt |= POSTFIX_SYMBOL;
 			st |= POSTFIX_SYMBOL;
 		} else if(strncmp(cs, "{nofix}", n) == 0) {
-			st &= ~POSTFIX_SYMBOL;
+			mt &= ~POSTFIX_SYMBOL;
+			mt |= NOFIX_SYMBOL;
 			st |= NOFIX_SYMBOL;
 		} else {
 			report_source_error("unknown attribute");
@@ -917,7 +919,7 @@ static char const *process_directive(char const *cs) {
 		n   = strcspn(cs, "}");
 		cs += n;
 		if((sym.len > 0)
-			&& !symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', st, sym, rpl, val)
+			&& !symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', st & mt, sym, rpl, val)
 		) {
 			report_source_error("too many functions");
 		}
@@ -939,7 +941,7 @@ static char const *process_directive(char const *cs) {
 			cs += n;
 			val = (VALUE){ .type = val.u, .p = NULL };
 			if((sym.len > 0)
-				&& !symbol_intern(N_SETS, settab, type, st, sym, rpl, val)
+				&& !symbol_intern(N_SETS, settab, type, st & mt, sym, rpl, val)
 			) {
 				report_source_error("too many sets");
 			}
@@ -982,7 +984,7 @@ static char const *process_directive(char const *cs) {
 			}
 			cs += n;
 			if(sym.len > 0) {
-				SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, st, sym, rpl, val);
+				SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, type, st & mt, sym, rpl, val);
 				if(!sp) {
 					report_source_error("too many symbols");
 				} else if(set) {
