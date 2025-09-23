@@ -43,8 +43,9 @@ typedef struct {
 	SYMBOL;
 
 #define HIDDEN_SYMBOL  (UINT64_C(1) << 31)
-#define DELIMITER_SYMBOL  (UINT64_C(1) << 30)
-#define POSTFIX_SYMBOL  (UINT64_C(1) << 29)
+#define DELIMITER_SYMBOL  (UINT64_C(1) << 32)
+#define POSTFIX_SYMBOL  (UINT64_C(1) << 33)
+#define NOFIX_SYMBOL  (UINT64_C(1) << 34)
 
 typedef struct {
 	uint64_t h;

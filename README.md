@@ -149,7 +149,9 @@ Additionally, the back-tick ( ` ) character can be used to quote the next [non-i
 Identifiers may be preceeded by an _attribute_, current attributes are:
 -	`{delimiter}`  indicates that the _identifier_ is to be treated as an instruction delimiter.
 -	`{hidden}`     indicates that the _identifier_ is to be excluded from export.
--	`{postfix}`    indicates that the **set** _identifier_ is to be appended to the _member_ _identifier_ when exported: normally it will be prepended.
+-	`{prefix}`     indicates that the **set** _identifier_ is to be prepended to the _member_ _identifier_ when exported; this is the default.
+-	`{postfix}`    indicates that the **set** _identifier_ is to be appended to the _member_ _identifier_ when exported.
+-	`{nofix}`      indicates that the **set** _identifier_ is not affixed to the _member_ _identifier_ when exported.
 
 `{` [ _attribute_ ] _identifier_ `}`
 
