@@ -914,14 +914,19 @@ static char const *process_directive(char const *cs) {
 	cs = skipspace(cs + sym.len);
 	if(cs[n] == '{') {
 		val = VALUE(p, NULL, 0);
+		rpl = STRING(0, "");
 		cs += n + 1;
+		SYMBOL *sp = NULL;
+		if((sym.len > 0)
+			&& !(sp = symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', st & mt, sym, rpl, val))
+		) {
+			report_source_error("too many functions");
+		}
 		rpl = compile_expression(&cs);
 		n   = strcspn(cs, "}");
 		cs += n;
-		if((sym.len > 0)
-			&& !symbol_intern(N_FUNCTIONS, funtab, ('{' << 8) | '}', st & mt, sym, rpl, val)
-		) {
-			report_source_error("too many functions");
+		if(sp) {
+			sp->rpl = rpl;
 		}
 	} else {
 		int type = '=';
