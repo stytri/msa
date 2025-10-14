@@ -39,8 +39,8 @@ typedef struct eval {
 	uint64_t (*load)(struct eval *e, uint64_t a);
 	uint64_t (*func)(struct eval *e, uint16_t a);
 	uint64_t*(*symp)(uint64_t a);
-	uint64_t (*stag)(uint64_t a, uint64_t);
-	uint64_t (*tag) (bool, uint64_t);
+	uint64_t (*stag)(uint64_t a, int op, uint64_t);
+	uint64_t (*tag) (int op, uint64_t);
 	VALUE      v[N_EVAL_VARIANTS];
 }
 	EVAL;
@@ -70,11 +70,11 @@ static uint64_t *eval_nul_symp(uint64_t) {
 	return &dummy;
 }
 
-static uint64_t eval_nul_stag(uint64_t, uint64_t) {
+static uint64_t eval_nul_stag(uint64_t, int, uint64_t) {
 	return 0;
 }
 
-static uint64_t eval_nul_tag(bool, uint64_t) {
+static uint64_t eval_nul_tag(int, uint64_t) {
 	return 0;
 }
 
@@ -127,6 +127,8 @@ static uint64_t eval_nul_tag(bool, uint64_t) {
 	ENUM(LOAD, "=@") \
 \
 	ENUM(TAG_AND, "$&") \
+	ENUM(TAG_IOR, "$|") \
+	ENUM(TAG_XOR, "$^") \
 	ENUM(TAG_SET, "$=") \
 \
 	ENUM(ERROR_CHARACTER,   "invalid character in expression") \
@@ -141,6 +143,8 @@ static uint64_t eval_nul_tag(bool, uint64_t) {
 \
 	ENUM(INDIRECT, "@") \
 	ENUM(INDIRECT_TAG_AND, "@&") \
+	ENUM(INDIRECT_TAG_IOR, "@|") \
+	ENUM(INDIRECT_TAG_XOR, "@^") \
 \
 	ENUM(FUNCTION, "()") \
 \
@@ -777,6 +781,20 @@ static STRING eval_tokenize(
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 				continue;
+			case '|':
+				if(state < 2) {
+					((uint8_t *)t.str)[t.len++] = EVAL_TAG_IOR;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
+				continue;
+			case '^':
+				if(state < 2) {
+					((uint8_t *)t.str)[t.len++] = EVAL_TAG_XOR;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
+				continue;
 			case '=':
 				if(state < 2) {
 					((uint8_t *)t.str)[t.len++] = EVAL_TAG_SET;
@@ -805,8 +823,11 @@ static STRING eval_tokenize(
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 				continue;
 			}
+			int tag_op = 0;
 			switch(c) {
-			case '&':
+			case '&': tag_op++; [[fallthrough]];
+			case '|': tag_op++; [[fallthrough]];
+			case '^':
 				c = get(p);
 				if(isdigit(c)) {
 					if(t.len >= (token.len - 1)) {
@@ -814,7 +835,12 @@ static STRING eval_tokenize(
 						return STRING(0, "");
 					}
 					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
-					((uint8_t *)t.str)[t.len++] = EVAL_INDIRECT_TAG_AND;
+					static const uint8_t tag_op_token[3] = {
+						EVAL_INDIRECT_TAG_XOR,
+						EVAL_INDIRECT_TAG_IOR,
+						EVAL_INDIRECT_TAG_AND,
+					};
+					((uint8_t *)t.str)[t.len++] = tag_op_token[tag_op];
 					((uint8_t *)t.str)[t.len++] = c;
 					if(state < 2) {
 						continue;
@@ -1230,17 +1256,37 @@ static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	case EVAL_TAG_AND:
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_unary(cs + 1, e, csp);
-		l = e ? e->tag(false, l) : 0;
+		l = e ? e->tag('&', l) : 0;
+		return l;
+	case EVAL_TAG_IOR:
+		EVAL_TOKENPRINT(cs, e);
+		l = eval_unary(cs + 1, e, csp);
+		l = e ? e->tag('|', l) : 0;
+		return l;
+	case EVAL_TAG_XOR:
+		EVAL_TOKENPRINT(cs, e);
+		l = eval_unary(cs + 1, e, csp);
+		l = e ? e->tag('^', l) : 0;
 		return l;
 	case EVAL_TAG_SET:
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_assignment(cs + 1, e, csp);
-		l = e ? e->tag(true, l) : 0;
+		l = e ? e->tag('=', l) : 0;
 		return l;
 	case EVAL_INDIRECT_TAG_AND:
 		EVAL_TOKENPRINT(cs, e);
 		l = eval_unary(cs + 1, e, csp);
-		l = e ? e->stag(e->v[*cs % N_EVAL_VARIANTS].u, l) : 0;
+		l = e ? e->stag(e->v[*cs % N_EVAL_VARIANTS].u, '&', l) : 0;
+		return l;
+	case EVAL_INDIRECT_TAG_IOR:
+		EVAL_TOKENPRINT(cs, e);
+		l = eval_unary(cs + 1, e, csp);
+		l = e ? e->stag(e->v[*cs % N_EVAL_VARIANTS].u, '|', l) : 0;
+		return l;
+	case EVAL_INDIRECT_TAG_XOR:
+		EVAL_TOKENPRINT(cs, e);
+		l = eval_unary(cs + 1, e, csp);
+		l = e ? e->stag(e->v[*cs % N_EVAL_VARIANTS].u, '^', l) : 0;
 		return l;
 	case EVAL_VARIANT_TYPE:
 		EVAL_TOKENPRINT(cs, e);

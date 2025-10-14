@@ -348,10 +348,22 @@ static void readme(char *arg0) {
 	puts("\n&emsp;evaluates _address_ expression and returns the byte from memory at the resulting _address_.");
 	puts("");
 	puts("`@&`_variant_ _value_");
-	puts("\n&emsp;evaluates _value_ expression and returns the bitwise and with the symbol _variant_'s _tag_ value.");
+	puts("\n&emsp;evaluates _value_ expression and returns the bitwise AND with the symbol _variant_'s _tag_ value.");
+	puts("");
+	puts("`@|`_variant_ _value_");
+	puts("\n&emsp;evaluates _value_ expression and performs a bitwise OR with the symbol _variant_'s _tag_ value, setting the _tag_ value, and returning the result.");
+	puts("");
+	puts("`@^`_variant_ _value_");
+	puts("\n&emsp;evaluates _value_ expression and performs a bitwise XOR with the symbol _variant_'s _tag_ value, setting the _tag_ value, and returning the result.");
 	puts("");
 	puts("`$&` _value_");
-	puts("\n&emsp;evaluates _value_ expression and returns the bitwise and with a global _tag_ value.");
+	puts("\n&emsp;evaluates _value_ expression and returns the bitwise AND with a global _tag_ value.");
+	puts("");
+	puts("`$|` _value_");
+	puts("\n&emsp;evaluates _value_ expression and performs a bitwise OR with a global _tag_ value, setting the _tag_ value, and returning the result.");
+	puts("");
+	puts("`$^` _value_");
+	puts("\n&emsp;evaluates _value_ expression and performs a bitwise XOR with a global _tag_ value, setting the _tag_ value, and returning the result.");
 	puts("");
 	puts("`$=` _value_");
 	puts("\n&emsp;evaluates _value_ expression and assigns to a global _tag_ value.");
@@ -780,14 +792,25 @@ static uint64_t *symptr(uint64_t a) {
 	return &sp->val.u;
 }
 
-static uint64_t symtag(uint64_t a, uint64_t u) {
+static uint64_t symtag(uint64_t a, int op, uint64_t u) {
 	SYMBOL *sp = (SYMBOL *)a;
-	return sp->tag & u;
+	switch(op) {
+	case '&': return sp->tag & u;
+	case '|': return sp->tag |= u;
+	case '^': return sp->tag ^= u;
+	default : return sp->tag;
+	}
 }
 
-static uint64_t tag(bool set, uint64_t u) {
+static uint64_t tag(int op, uint64_t u) {
 	static uint64_t v = 0;
-	return set ? (v = u) : (v & u);
+	switch(op) {
+	case '&': return v & u;
+	case '|': return v |= u;
+	case '^': return v ^= u;
+	case '=': return v = u;
+	default : return v;
+	}
 }
 
 static int getfunc(size_t n, char const s[]) {

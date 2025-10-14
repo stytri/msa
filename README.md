@@ -366,11 +366,27 @@ _left_ `<>>` _right_
 
 `@&`_variant_ _value_
 
-&emsp;evaluates _value_ expression and returns the bitwise and with the symbol _variant_'s _tag_ value.
+&emsp;evaluates _value_ expression and returns the bitwise AND with the symbol _variant_'s _tag_ value.
+
+`@|`_variant_ _value_
+
+&emsp;evaluates _value_ expression and performs a bitwise OR with the symbol _variant_'s _tag_ value, setting the _tag_ value, and returning the result.
+
+`@^`_variant_ _value_
+
+&emsp;evaluates _value_ expression and performs a bitwise XOR with the symbol _variant_'s _tag_ value, setting the _tag_ value, and returning the result.
 
 `$&` _value_
 
-&emsp;evaluates _value_ expression and returns the bitwise and with a global _tag_ value.
+&emsp;evaluates _value_ expression and returns the bitwise AND with a global _tag_ value.
+
+`$|` _value_
+
+&emsp;evaluates _value_ expression and performs a bitwise OR with a global _tag_ value, setting the _tag_ value, and returning the result.
+
+`$^` _value_
+
+&emsp;evaluates _value_ expression and performs a bitwise XOR with a global _tag_ value, setting the _tag_ value, and returning the result.
 
 `$=` _value_
 
