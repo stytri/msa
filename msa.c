@@ -133,6 +133,11 @@ static void readme(char *arg0) {
 	puts("\n&emsp;when an integer value is encountered in the assembly source, its is replaced by _replacement_ in the pattern.");
 	puts("\n&emsp;default is `%i`");
 	puts("");
+	puts("`$CHARACTER=` _replacement_");
+	puts("\n&emsp;where _replacement_ is a sequence of graphical characters excluding `}`.");
+	puts("\n&emsp;when an character literal is encountered in the assembly source, its is replaced by _replacement_ in the pattern.");
+	puts("\n&emsp;default is to use the integer _replacement_.");
+	puts("");
 	puts("`$SEGMENTS=` _size_ [`,` `FIXED`]");
 	puts("\n&emsp;where _size_ is the size of a segment in **byte**s; ISO/IEC suffixes are recognised (e.g. `Ki`) for units of 1024 **byte**s, as well as the vernacular `b` suffix (e.g. `KB`).");
 	puts("\n&emsp;if segments are to be enabled, this directive _must_ be present _before_ assembler instructions are processed.");
@@ -591,6 +596,7 @@ static SEGLIST seglist      = {};
 
 static STRING rpladdr       = STRING(2, "%a");
 static STRING rplint        = STRING(2, "%i");
+static STRING rplchar       = STRING(0, "");
 
 static uint64_t emit8(EVAL *e, uint64_t a, uint64_t v) {
 	(void)e;
@@ -1169,6 +1175,7 @@ static char const *compile_instruction(char const *cs) {
 			continue;
 		}
 		if(isdigit(c) || (c == '\'')) {
+			bool is_char = c == '\'';
 			if(nv >= N_EVAL_VARIANTS) {
 				report_source_error("too many operands");
 				return NULL;
@@ -1185,8 +1192,14 @@ static char const *compile_instruction(char const *cs) {
 			}
 			switch(env.v[i].type) {
 			case 'u':
-				for(i = 0; i < rplint.len; i++) {
-					PUSHC(((char *)rplint.str)[i]);
+				if(is_char && (rplchar.len > 0)) {
+					for(i = 0; i < rplchar.len; i++) {
+						PUSHC(((char *)rplchar.str)[i]);
+					}
+				} else {
+					for(i = 0; i < rplint.len; i++) {
+						PUSHC(((char *)rplint.str)[i]);
+					}
 				}
 				cs = s;
 				continue;
@@ -1427,6 +1440,16 @@ static bool process_files(int argi, int argc, char **argv) {
 					}
 					if(*cs == '}') {
 						rplint = STRING(cs - s, s);
+						cs++;
+						continue;
+					}
+				} else if(strncasecmp(cs+2, "CHARACTER=", 10) == 0) {
+					s = (char *)skipspace(cs+12);
+					for(cs = s; isgraph(*cs) && (*cs != '}');) {
+						cs++;
+					}
+					if(*cs == '}') {
+						rplchar = STRING(cs - s, s);
 						cs++;
 						continue;
 					}

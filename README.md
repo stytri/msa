@@ -80,6 +80,14 @@ These directives are identified by a initial `$`:
 
 &emsp;default is `%i`
 
+`$CHARACTER=` _replacement_
+
+&emsp;where _replacement_ is a sequence of graphical characters excluding `}`.
+
+&emsp;when an character literal is encountered in the assembly source, its is replaced by _replacement_ in the pattern.
+
+&emsp;default is to use the integer _replacement_.
+
 `$SEGMENTS=` _size_ [`,` `FIXED`]
 
 &emsp;where _size_ is the size of a segment in **byte**s; ISO/IEC suffixes are recognised (e.g. `Ki`) for units of 1024 **byte**s, as well as the vernacular `b` suffix (e.g. `KB`).
