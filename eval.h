@@ -225,6 +225,9 @@ static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 			o = *cs++ % N_EVAL_VARIANTS;
 			e->trace("%u{%c:0x%"PRIx64"}", (unsigned)o, (int)e->v[o].type, e->v[o].u);
 			return cs;
+		case EVAL_INDIRECT_TAG_AND: [[fallthrough]];
+		case EVAL_INDIRECT_TAG_IOR: [[fallthrough]];
+		case EVAL_INDIRECT_TAG_XOR: [[fallthrough]];
 		case EVAL_INDIRECT:
 			o = *cs++ % N_EVAL_VARIANTS;
 			e->trace("%u{%c:0x%"PRIx64"}", (unsigned)o, (int)e->v[o].type, *e->symp(e->v[o].u));
@@ -1275,23 +1278,27 @@ static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		return l;
 	case EVAL_INDIRECT_TAG_AND:
 		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
-		l = e ? e->stag(e->v[*cs % N_EVAL_VARIANTS].u, '&', l) : 0;
+		o = *(cs + 1) % N_EVAL_VARIANTS;
+		l = eval_unary(cs + 2, e, csp);
+		l = e ? e->stag(e->v[o].u, '&', l) : 0;
 		return l;
 	case EVAL_INDIRECT_TAG_IOR:
 		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
-		l = e ? e->stag(e->v[*cs % N_EVAL_VARIANTS].u, '|', l) : 0;
+		o = *(cs + 1) % N_EVAL_VARIANTS;
+		l = eval_unary(cs + 2, e, csp);
+		l = e ? e->stag(e->v[o].u, '|', l) : 0;
 		return l;
 	case EVAL_INDIRECT_TAG_XOR:
 		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
-		l = e ? e->stag(e->v[*cs % N_EVAL_VARIANTS].u, '^', l) : 0;
+		o = *(cs + 1) % N_EVAL_VARIANTS;
+		l = eval_unary(cs + 2, e, csp);
+		l = e ? e->stag(e->v[o].u, '^', l) : 0;
 		return l;
 	case EVAL_VARIANT_TYPE:
 		EVAL_TOKENPRINT(cs, e);
-		l = e ? e->v[*(cs + 1) % N_EVAL_VARIANTS].type : 0;
+		o = *(cs + 1) % N_EVAL_VARIANTS;
 		*csp = cs + 2;
+		l = e ? e->v[o].type : 0;
 		return l;
 	case EVAL_LOAD:
 		EVAL_TOKENPRINT(cs, e);
