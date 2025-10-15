@@ -440,6 +440,18 @@ _identifier_
 
 &emsp;The value assigned to (non-function) _identifier_ is returned.
 
+`INVALIDADDRESS`
+
+&emsp;outputs an invalid address error message.
+
+&emsp;returns `0`.
+
+`INVALIDOFFSET`
+
+&emsp;outputs an invalid offset error message.
+
+&emsp;returns `0`.
+
 `INVALID`
 
 &emsp;outputs an invalid operand error message.

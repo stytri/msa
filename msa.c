@@ -405,6 +405,14 @@ static void readme(char *arg0) {
 	puts("_identifier_");
 	puts("\n&emsp;The value assigned to (non-function) _identifier_ is returned.");
 	puts("");
+	puts("`INVALIDADDRESS`");
+	puts("\n&emsp;outputs an invalid address error message.");
+	puts("\n&emsp;returns `0`.");
+	puts("");
+	puts("`INVALIDOFFSET`");
+	puts("\n&emsp;outputs an invalid offset error message.");
+	puts("\n&emsp;returns `0`.");
+	puts("");
 	puts("`INVALID`");
 	puts("\n&emsp;outputs an invalid operand error message.");
 	puts("\n&emsp;returns `0`.");

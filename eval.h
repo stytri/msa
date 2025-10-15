@@ -136,6 +136,8 @@ static uint64_t eval_nul_tag(int, uint64_t) {
 	ENUM(ERROR_OPERAND,     "unexpected operand in expression") \
 	ENUM(ERROR_PARENTHESIS, "expression parenthesis mismatch") \
 	ENUM(ERROR_FUNCTION,    "invalid function name") \
+	ENUM(ERROR_ADDRESS,     "invalid address") \
+	ENUM(ERROR_OFFSET,      "invalid offset") \
 	ENUM(ERROR_INVALID,     "invalid operand") \
 \
 	ENUM(VARIANT, "$") \
@@ -1037,6 +1039,24 @@ static STRING eval_tokenize(
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
+				if((strcmp(fn, "INVALIDADDRESS") == 0) || (strcmp(fn, "invalidaddress") == 0)) {
+					((uint8_t *)t.str)[t.len++] = EVAL_ERROR_ADDRESS;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
+					continue;
+				}
+				if((strcmp(fn, "INVALIDOFFSET") == 0) || (strcmp(fn, "invalidoffset") == 0)) {
+					((uint8_t *)t.str)[t.len++] = EVAL_ERROR_OFFSET;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
+					continue;
+				}
 				if((strcmp(fn, "INVALID") == 0) || (strcmp(fn, "invalid") == 0)) {
 					((uint8_t *)t.str)[t.len++] = EVAL_ERROR_INVALID;
 					if(state < 2) {
@@ -1195,6 +1215,8 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		l ^= x;
 		*csp = cs;
 		return l;
+	case EVAL_ERROR_ADDRESS:
+	case EVAL_ERROR_OFFSET:
 	case EVAL_ERROR_INVALID:
 		if(e) {
 			e->print(eval_error_message(o));
