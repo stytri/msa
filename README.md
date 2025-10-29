@@ -1,6 +1,6 @@
 # msa
 
-## Version 3.6.0
+## Version 3.7.0
 
 ## Command Line
 
@@ -235,6 +235,12 @@ Although not implicitly asssigned, the `$0` variant is intended for use as the c
 
 When parsing instructions, operand values are sequentially assigned to variants starting at `$1`.
 
+#### indexed variants
+
+Indexed Variants are an initial `$`, followed by parenthesis enclosed expression; the result of evaluating the expression is the variant number
+
+Operations on Indexed Variants are restricted to assigning and obtaining their value.
+
 #### operators
 
 Operators in order of increasing precedence are:
@@ -253,7 +259,7 @@ _address_ `@=` _value_
 
 _variant_ `=` _value_
 
-&emsp;assigns the _value_ sub-expression to a _variant_.
+&emsp;assigns the _value_ sub-expression to a _variant_, or, _indexed variant_.
 
 ##### condition
 

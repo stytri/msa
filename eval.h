@@ -135,6 +135,7 @@ static uint64_t eval_nul_tag(int, uint64_t) {
 	ENUM(ERROR_OPERATOR,    "unexpected operator in expression") \
 	ENUM(ERROR_OPERAND,     "unexpected operand in expression") \
 	ENUM(ERROR_PARENTHESIS, "expression parenthesis mismatch") \
+	ENUM(ERROR_TOO_COMPLEX, "expression too complex") \
 	ENUM(ERROR_FUNCTION,    "invalid function name") \
 	ENUM(ERROR_ADDRESS,     "invalid address") \
 	ENUM(ERROR_OFFSET,      "invalid offset") \
@@ -142,6 +143,7 @@ static uint64_t eval_nul_tag(int, uint64_t) {
 \
 	ENUM(VARIANT, "$") \
 	ENUM(VARIANT_TYPE, "$?") \
+	ENUM(INDEXED_VARIANT, "$") \
 \
 	ENUM(INDIRECT, "@") \
 	ENUM(INDIRECT_TAG_AND, "@&") \
@@ -210,22 +212,27 @@ static const char *eval_error_message(int e) {
 #ifdef EVAL_TRACE
 static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 	uint64_t l, x = 0;
-	uint16_t    a;
 	uint8_t     o = *cs++;
 	if(o < (sizeof(eval_tokens)/sizeof(*eval_tokens))) {
 		e->trace("%s", eval_tokens[o]);
 		switch(o) {
 		case EVAL_END:
 			return NULL;
-		case EVAL_IF:
-		case EVAL_ELSE:
-			a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+		case EVAL_CONDITION_IF:
+		case EVAL_CONDITION_ELSE:
+			l = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
 			cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
-			e->trace("{%u}", (unsigned)a);
+			e->trace("{%"PRIu64"}", l);
 			return cs;
 		case EVAL_VARIANT:
+		case EVAL_VARIANT_TYPE:
 			o = *cs++ % N_EVAL_VARIANTS;
 			e->trace("%u{%c:0x%"PRIx64"}", (unsigned)o, (int)e->v[o].type, e->v[o].u);
+			return cs;
+		case EVAL_INDEXED_VARIANT:
+			l = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+			cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+			e->trace("{%"PRIu64"}", l);
 			return cs;
 		case EVAL_INDIRECT_TAG_AND: [[fallthrough]];
 		case EVAL_INDIRECT_TAG_IOR: [[fallthrough]];
@@ -235,19 +242,19 @@ static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 			e->trace("%u{%c:0x%"PRIx64"}", (unsigned)o, (int)e->v[o].type, *e->symp(e->v[o].u));
 			return cs;
 		case EVAL_FUNCTION:
-			a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_FUNCTIONS));
+			l = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_FUNCTIONS));
 			cs += EVAL__IMMEDIATE_SIZE(N_FUNCTIONS);
-			e->trace("{%u}", (unsigned)a);
+			e->trace("{%"PRIu64"}", l);
 			return cs;
 		case EVAL_CONSTANT8_COMPLEMENT:
-			x = ~x; // fallthrough
+			x = ~x; [[fallthrough]];
 		case EVAL_CONSTANT8:
 			l  = *cs++;
 			l ^= x;
 			e->trace("0x%"PRIx64, l);
 			return cs;
 		case EVAL_CONSTANT16_COMPLEMENT:
-			x = ~x; // fallthrough
+			x = ~x; [[fallthrough]];
 		case EVAL_CONSTANT16:
 			l  = *cs++;
 			l |= (uint64_t)*cs++ << 8;
@@ -255,7 +262,7 @@ static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 			e->trace("0x%"PRIx64, l);
 			return cs;
 		case EVAL_CONSTANT32_COMPLEMENT:
-			x = ~x; // fallthrough
+			x = ~x; [[fallthrough]];
 		case EVAL_CONSTANT32:
 			l  = *cs++;
 			l |= (uint64_t)*cs++ << 8;
@@ -265,7 +272,7 @@ static uint8_t const *eval_tokenprint(uint8_t const *cs, EVAL *e) {
 			e->trace("0x%"PRIx64, l);
 			return cs;
 		case EVAL_CONSTANT64_COMPLEMENT:
-			x = ~x; // fallthrough
+			x = ~x; [[fallthrough]];
 		case EVAL_CONSTANT64:
 			l  = *cs++;
 			l |= (uint64_t)*cs++ << 8;
@@ -306,12 +313,12 @@ static void eval_detokenize(uint8_t const *cs, EVAL *e) {
 		;
 }
 
-#	define EVAL_TOKENPRINT(EVAL_TOKENPRINT__cs,EVAL_TOKENPRINT__e) \
+#	define EVAL_TOKENPRINT(EVAL_TOKENPRINT__cs,EVAL_TOKENPRINT__e,EVAL_TOKENPRINT__q) \
 		do { \
-			if(EVAL_TOKENPRINT__e) eval_tokenprint(EVAL_TOKENPRINT__cs,EVAL_TOKENPRINT__e); \
+			if(EVAL_TOKENPRINT__q == EVAL_Evaluate) eval_tokenprint(EVAL_TOKENPRINT__cs,EVAL_TOKENPRINT__e); \
 		} while(0)
 #else
-#	define EVAL_TOKENPRINT(EVAL_TOKENPRINT__cs,EVAL_TOKENPRINT__e) \
+#	define EVAL_TOKENPRINT(EVAL_TOKENPRINT__cs,EVAL_TOKENPRINT__e,EVAL_TOKENPRINT__q) \
 		do { ; } while(0)
 #endif//def EVAL_TRACE
 
@@ -416,7 +423,9 @@ static STRING eval_tokenize(
 			return STRING(0, "");
 		}
 		switch(c) {
+			int      s;
 			uint64_t u;
+			uint8_t  e;
 		case ';':
 		case '#':
 			while((c = get(p))) {
@@ -435,6 +444,7 @@ static STRING eval_tokenize(
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
 			continue;
 		case '(':
+		case_paren:
 			if(state < 2) {
 				paren++;
 				((uint8_t *)t.str)[t.len++] = EVAL_PARENTHESIS_LEFT;
@@ -746,37 +756,39 @@ static STRING eval_tokenize(
 		case '$':
 			c = get(p);
 			if(isdigit(c)) {
-				if(t.len >= (token.len - 1)) {
-					errno = ENOMEM;
-					return STRING(0, "");
-				}
-				c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
-				((uint8_t *)t.str)[t.len++] = EVAL_VARIANT;
-				((uint8_t *)t.str)[t.len++] = c;
-				if(state < 2) {
-					state = 3;
-					continue;
-				}
-				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
-				continue;
-			}
-			switch(c) {
-			case '?':
-				c = get(p);
-				if(isdigit(c)) {
-					if(t.len >= (token.len - 1)) {
-						errno = ENOMEM;
-						return STRING(0, "");
-					}
+				s = 3;
+				e = EVAL_VARIANT;
+			variant_number:
+				if(t.len < (token.len - 1)) {
 					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
-					((uint8_t *)t.str)[t.len++] = EVAL_VARIANT_TYPE;
+					((uint8_t *)t.str)[t.len++] = e;
 					((uint8_t *)t.str)[t.len++] = c;
 					if(state < 2) {
-						state = 2;
+						state = s;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
+				}
+				errno = ENOMEM;
+				return STRING(0, "");
+			}
+			switch(c) {
+			case '(':
+				if(t.len < (token.len - EVAL__IMMEDIATE_SIZE(N_TOKENS) - 3)) {
+					((uint8_t *)t.str)[t.len++] = EVAL_INDEXED_VARIANT;
+					eval__save_immediate(0, &((uint8_t *)t.str)[t.len], EVAL__IMMEDIATE_SIZE(N_TOKENS));
+					t.len += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+					goto case_paren;
+				}
+				errno = ENOMEM;
+				return STRING(0, "");
+			case '?':
+				c = get(p);
+				if(isdigit(c)) {
+					s = 2;
+					e = EVAL_VARIANT_TYPE;
+					goto variant_number;
 				}
 				break;
 			case '&':
@@ -814,19 +826,19 @@ static STRING eval_tokenize(
 		case '@':
 			c = get(p);
 			if(isdigit(c)) {
-				if(t.len >= (token.len - 1)) {
-					errno = ENOMEM;
-					return STRING(0, "");
-				}
-				c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
-				((uint8_t *)t.str)[t.len++] = EVAL_INDIRECT;
-				((uint8_t *)t.str)[t.len++] = c;
-				if(state < 2) {
-					state = 2;
+				if(t.len < (token.len - 1)) {
+					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
+					((uint8_t *)t.str)[t.len++] = EVAL_INDIRECT;
+					((uint8_t *)t.str)[t.len++] = c;
+					if(state < 2) {
+						state = 2;
+						continue;
+					}
+					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
-				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
-				continue;
+				errno = ENOMEM;
+				return STRING(0, "");
 			}
 			int tag_op = 0;
 			switch(c) {
@@ -835,23 +847,23 @@ static STRING eval_tokenize(
 			case '^':
 				c = get(p);
 				if(isdigit(c)) {
-					if(t.len >= (token.len - 1)) {
-						errno = ENOMEM;
-						return STRING(0, "");
-					}
-					c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
-					static const uint8_t tag_op_token[3] = {
-						EVAL_INDIRECT_TAG_XOR,
-						EVAL_INDIRECT_TAG_IOR,
-						EVAL_INDIRECT_TAG_AND,
-					};
-					((uint8_t *)t.str)[t.len++] = tag_op_token[tag_op];
-					((uint8_t *)t.str)[t.len++] = c;
-					if(state < 2) {
+					if(t.len < (token.len - 1)) {
+						c = eval_getuint(c, p, get, unget) % N_EVAL_VARIANTS;
+						static const uint8_t tag_op_token[3] = {
+							EVAL_INDIRECT_TAG_XOR,
+							EVAL_INDIRECT_TAG_IOR,
+							EVAL_INDIRECT_TAG_AND,
+						};
+						((uint8_t *)t.str)[t.len++] = tag_op_token[tag_op];
+						((uint8_t *)t.str)[t.len++] = c;
+						if(state < 2) {
+							continue;
+						}
+						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 						continue;
 					}
-					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
-					continue;
+					errno = ENOMEM;
+					return STRING(0, "");
 				}
 				break;
 			case '=':
@@ -935,44 +947,61 @@ static STRING eval_tokenize(
 				int      q = (~u < u);
 				uint64_t x = q ? ~u : u;
 				if(x <= UINT8_MAX) {
-					if(t.len >= token.len) {
-						errno = ENOMEM;
-						return STRING(0, "");
-					}
-					((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT8_COMPLEMENT : EVAL_CONSTANT8;
-					((uint8_t *)t.str)[t.len++] = x & 255u;
-					if(state < 2) {
-						state = 2;
+					if(t.len < token.len) {
+						((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT8_COMPLEMENT : EVAL_CONSTANT8;
+						((uint8_t *)t.str)[t.len++] = x & 255u;
+						if(state < 2) {
+							state = 2;
+							continue;
+						}
+						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 						continue;
 					}
-					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
-					continue;
+					errno = ENOMEM;
+					return STRING(0, "");
 				}
 				if(x <= UINT16_MAX) {
-					if(t.len >= (token.len - 2)) {
-						errno = ENOMEM;
-						return STRING(0, "");
-					}
-					((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT16_COMPLEMENT : EVAL_CONSTANT16;
-					((uint8_t *)t.str)[t.len++] =  x       & 255u;
-					((uint8_t *)t.str)[t.len++] = (x >> 8) & 255u;
-					if(state < 2) {
-						state = 2;
+					if(t.len < (token.len - 2)) {
+						((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT16_COMPLEMENT : EVAL_CONSTANT16;
+						((uint8_t *)t.str)[t.len++] =  x       & 255u;
+						((uint8_t *)t.str)[t.len++] = (x >> 8) & 255u;
+						if(state < 2) {
+							state = 2;
+							continue;
+						}
+						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 						continue;
 					}
-					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
-					continue;
+					errno = ENOMEM;
+					return STRING(0, "");
 				}
 				if(x <= UINT32_MAX) {
-					if(t.len >= (token.len - 4)) {
-						errno = ENOMEM;
-						return STRING(0, "");
+					if(t.len < (token.len - 4)) {
+						((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT32_COMPLEMENT : EVAL_CONSTANT32;
+						((uint8_t *)t.str)[t.len++] =  x        & 255u;
+						((uint8_t *)t.str)[t.len++] = (x >>  8) & 255u;
+						((uint8_t *)t.str)[t.len++] = (x >> 16) & 255u;
+						((uint8_t *)t.str)[t.len++] = (x >> 24) & 255u;
+						if(state < 2) {
+							state = 2;
+							continue;
+						}
+						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
+						continue;
 					}
-					((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT32_COMPLEMENT : EVAL_CONSTANT32;
+					errno = ENOMEM;
+					return STRING(0, "");
+				}
+				if(t.len < (token.len - 8)) {
+					((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT64_COMPLEMENT : EVAL_CONSTANT64;
 					((uint8_t *)t.str)[t.len++] =  x        & 255u;
 					((uint8_t *)t.str)[t.len++] = (x >>  8) & 255u;
 					((uint8_t *)t.str)[t.len++] = (x >> 16) & 255u;
 					((uint8_t *)t.str)[t.len++] = (x >> 24) & 255u;
+					((uint8_t *)t.str)[t.len++] = (x >> 32) & 255u;
+					((uint8_t *)t.str)[t.len++] = (x >> 40) & 255u;
+					((uint8_t *)t.str)[t.len++] = (x >> 48) & 255u;
+					((uint8_t *)t.str)[t.len++] = (x >> 56) & 255u;
 					if(state < 2) {
 						state = 2;
 						continue;
@@ -980,25 +1009,8 @@ static STRING eval_tokenize(
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
 					continue;
 				}
-				if(t.len >= (token.len - 8)) {
-					errno = ENOMEM;
-					return STRING(0, "");
-				}
-				((uint8_t *)t.str)[t.len++] = q ? EVAL_CONSTANT64_COMPLEMENT : EVAL_CONSTANT64;
-				((uint8_t *)t.str)[t.len++] =  x        & 255u;
-				((uint8_t *)t.str)[t.len++] = (x >>  8) & 255u;
-				((uint8_t *)t.str)[t.len++] = (x >> 16) & 255u;
-				((uint8_t *)t.str)[t.len++] = (x >> 24) & 255u;
-				((uint8_t *)t.str)[t.len++] = (x >> 32) & 255u;
-				((uint8_t *)t.str)[t.len++] = (x >> 40) & 255u;
-				((uint8_t *)t.str)[t.len++] = (x >> 48) & 255u;
-				((uint8_t *)t.str)[t.len++] = (x >> 56) & 255u;
-				if(state < 2) {
-					state = 2;
-					continue;
-				}
-				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
-				continue;
+				errno = ENOMEM;
+				return STRING(0, "");
 			}
 			if(isalpha(c) || (c == '_') || (c == '`')) {
 				size_t n = 1;
@@ -1095,7 +1107,7 @@ static STRING eval_tokenize(
 				state = 2;
 				continue;
 			}
-			// fallthrough
+			[[fallthrough]];
 		case '\0':
 			if(paren != 0) {
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_PARENTHESIS);
@@ -1109,78 +1121,108 @@ static STRING eval_tokenize(
 
 //------------------------------------------------------------------------------
 
-static uint64_t eval_sequence(uint8_t const *cs, EVAL *e, uint8_t const **csp);
+typedef enum {
+	EVAL_NoEvaluate,
+	EVAL_Evaluate,
+	EVAL_Verify,
+}
+	EVAL_TYPE;
 
-static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
+static uint64_t eval_sequence(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp);
+
+static uint64_t eval_primary(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
 	uint64_t l = 0, x = 0;
-	uint16_t a;
 	uint8_t  o = *cs;
 	switch(o) {
 	case EVAL_PARENTHESIS_LEFT:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_sequence(cs + 1, e, csp);
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_sequence(cs + 1, e, q, csp);
 		if(*(cs = *csp) == EVAL_PARENTHESIS_RIGHT) {
-			EVAL_TOKENPRINT(cs, e);
+			EVAL_TOKENPRINT(cs, e, q);
 			*csp = cs + 1;
 		}
 		return l;
 	case EVAL_VARIANT:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		cs++;
 		if(*(cs + 1) == EVAL_INCREMENT) {
-			EVAL_TOKENPRINT(cs + 1, e);
-			l = e ? e->v[*cs % N_EVAL_VARIANTS].u++ : 0;
+			EVAL_TOKENPRINT(cs + 1, e, q);
+			l = (q == EVAL_Evaluate) ? e->v[*cs % N_EVAL_VARIANTS].u++ : 0;
 			*csp = cs + 2;
 			return l;
 		}
 		if(*(cs + 1) == EVAL_DECREMENT) {
-			EVAL_TOKENPRINT(cs + 1, e);
-			l = e ? e->v[*cs % N_EVAL_VARIANTS].u-- : 0;
+			EVAL_TOKENPRINT(cs + 1, e, q);
+			l = (q == EVAL_Evaluate) ? e->v[*cs % N_EVAL_VARIANTS].u-- : 0;
 			*csp = cs + 2;
 			return l;
 		}
-		l = e ? e->v[*cs].u : 0;
+		l = (q == EVAL_Evaluate) ? e->v[*cs].u : 0;
 		*csp = cs + 1;
 		return l;
+	case EVAL_VARIANT_TYPE:
+		EVAL_TOKENPRINT(cs, e, q);
+		cs++;
+		l = (q == EVAL_Evaluate) ? e->v[*cs % N_EVAL_VARIANTS].type : 0;
+		*csp = cs + 1;
+		return l;
+	case EVAL_INDEXED_VARIANT:
+		EVAL_TOKENPRINT(cs, e, q);
+		cs++;
+		uint8_t *t = (uint8_t *)cs;
+		uint64_t n = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+		cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+		if((q != EVAL_NoEvaluate) || (n == 0)) {
+			x = eval_primary(cs, e, q, csp);
+			if(n == 0) {
+				cs = *csp;
+				n = cs - (t + EVAL__IMMEDIATE_SIZE(N_TOKENS));
+				eval__save_immediate(n, t, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+			}
+			l = (q == EVAL_Evaluate) ? e->v[x % N_EVAL_VARIANTS].u : 0;
+			return l;
+		}
+		*csp = cs + n;
+		return l;
 	case EVAL_INDIRECT:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		cs++;
 		if(*(cs + 1) == EVAL_INCREMENT) {
-			EVAL_TOKENPRINT(cs + 1, e);
-			l = e ? (*e->symp(e->v[*cs % N_EVAL_VARIANTS].u))++ : 0;
+			EVAL_TOKENPRINT(cs + 1, e, q);
+			l = (q == EVAL_Evaluate) ? (*e->symp(e->v[*cs % N_EVAL_VARIANTS].u))++ : 0;
 			*csp = cs + 2;
 			return l;
 		}
 		if(*(cs + 1) == EVAL_DECREMENT) {
-			EVAL_TOKENPRINT(cs + 1, e);
-			l = e ? (*e->symp(e->v[*cs % N_EVAL_VARIANTS].u))-- : 0;
+			EVAL_TOKENPRINT(cs + 1, e, q);
+			l = (q == EVAL_Evaluate) ? (*e->symp(e->v[*cs % N_EVAL_VARIANTS].u))-- : 0;
 			*csp = cs + 2;
 			return l;
 		}
-		l = e ? *e->symp(e->v[*cs % N_EVAL_VARIANTS].u) : 0;
+		l = (q == EVAL_Evaluate) ? *e->symp(e->v[*cs % N_EVAL_VARIANTS].u) : 0;
 		*csp = cs + 1;
 		return l;
 	case EVAL_FUNCTION:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		cs++;
-		a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_FUNCTIONS));
+		x = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_FUNCTIONS));
 		cs += EVAL__IMMEDIATE_SIZE(N_FUNCTIONS);
-		l = e ? e->func(e, a) : 0;
+		l = (q == EVAL_Evaluate) ? e->func(e, x) : 0;
 		*csp = cs;
 		return l;
 	case EVAL_CONSTANT8_COMPLEMENT:
-		x = ~x; // fallthrough
+		x = ~x; [[fallthrough]];
 	case EVAL_CONSTANT8:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		cs++;
 		l  = *cs++;
 		l ^= x;
 		*csp = cs;
 		return l;
 	case EVAL_CONSTANT16_COMPLEMENT:
-		x = ~x; // fallthrough
+		x = ~x; [[fallthrough]];
 	case EVAL_CONSTANT16:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		cs++;
 		l  = *cs++;
 		l |= (uint64_t)*cs++ << 8;
@@ -1188,9 +1230,9 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		*csp = cs;
 		return l;
 	case EVAL_CONSTANT32_COMPLEMENT:
-		x = ~x; // fallthrough
+		x = ~x; [[fallthrough]];
 	case EVAL_CONSTANT32:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		cs++;
 		l  = *cs++;
 		l |= (uint64_t)*cs++ << 8;
@@ -1200,9 +1242,9 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 		*csp = cs;
 		return l;
 	case EVAL_CONSTANT64_COMPLEMENT:
-		x = ~x; // fallthrough
+		x = ~x; [[fallthrough]];
 	case EVAL_CONSTANT64:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		cs++;
 		l  = *cs++;
 		l |= (uint64_t)*cs++ << 8;
@@ -1218,7 +1260,7 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	case EVAL_ERROR_ADDRESS:
 	case EVAL_ERROR_OFFSET:
 	case EVAL_ERROR_INVALID:
-		if(e) {
+		if(q == EVAL_Evaluate) {
 			e->print(eval_error_message(o));
 		}
 		*csp = cs + 1;
@@ -1226,17 +1268,17 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	default:
 		switch(o & EVAL_SMALLINT) {
 		case EVAL_BIT_MASK:
-			EVAL_TOKENPRINT(cs, e);
+			EVAL_TOKENPRINT(cs, e, q);
 			l = ~UINT64_C(0) >> (o & 63u);
 			*csp = cs + 1;
 			return l;
 		case EVAL_MASK_BIT:
-			EVAL_TOKENPRINT(cs, e);
+			EVAL_TOKENPRINT(cs, e, q);
 			l = UINT64_C(1) << (o & 63u);
 			*csp = cs + 1;
 			return l;
 		case EVAL_SMALLINT:
-			EVAL_TOKENPRINT(cs, e);
+			EVAL_TOKENPRINT(cs, e, q);
 			l = o & 63u;
 			*csp = cs + 1;
 			return l;
@@ -1247,115 +1289,109 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	}
 }
 
-static uint64_t eval_assignment(uint8_t const *cs, EVAL *e, uint8_t const **csp);
+static uint64_t eval_assignment(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp);
 
-static uint64_t eval_unary(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
+static uint64_t eval_unary(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
 	uint64_t l = 0;
 	int o = *cs;
 	switch(o) {
 	case EVAL_BOOLEAN_IS:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_unary(cs + 1, e, q, csp);
 		return !!l;
 	case EVAL_BOOLEAN_NOT:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_unary(cs + 1, e, q, csp);
 		return !l;
 	case EVAL_BINARY_MSB:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_unary(cs + 1, e, q, csp);
 		l = msbit(l);
 		return l;
 	case EVAL_BINARY_COMPLIMENT:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_unary(cs + 1, e, q, csp);
 		return ~l;
 	case EVAL_ARITHMETIC_NEGATE:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_unary(cs + 1, e, q, csp);
 		return -l;
 //	case EVAL_ARITHMETIC_PLUS:
-//		EVAL_TOKENPRINT(cs, e);
-//		l = eval_unary(cs + 1, e, csp);
+//		EVAL_TOKENPRINT(cs, e, q);
+//		l = eval_unary(cs + 1, e, q, csp);
 //		return l;
 	case EVAL_TAG_AND:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
-		l = e ? e->tag('&', l) : 0;
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_unary(cs + 1, e, q, csp);
+		l = (q == EVAL_Evaluate) ? e->tag('&', l) : 0;
 		return l;
 	case EVAL_TAG_IOR:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
-		l = e ? e->tag('|', l) : 0;
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_unary(cs + 1, e, q, csp);
+		l = (q == EVAL_Evaluate) ? e->tag('|', l) : 0;
 		return l;
 	case EVAL_TAG_XOR:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_unary(cs + 1, e, csp);
-		l = e ? e->tag('^', l) : 0;
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_unary(cs + 1, e, q, csp);
+		l = (q == EVAL_Evaluate) ? e->tag('^', l) : 0;
 		return l;
 	case EVAL_TAG_SET:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_assignment(cs + 1, e, csp);
-		l = e ? e->tag('=', l) : 0;
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_assignment(cs + 1, e, q, csp);
+		l = (q == EVAL_Evaluate) ? e->tag('=', l) : 0;
 		return l;
 	case EVAL_INDIRECT_TAG_AND:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		o = *(cs + 1) % N_EVAL_VARIANTS;
-		l = eval_unary(cs + 2, e, csp);
-		l = e ? e->stag(e->v[o].u, '&', l) : 0;
+		l = eval_unary(cs + 2, e, q, csp);
+		l = (q == EVAL_Evaluate) ? e->stag(e->v[o].u, '&', l) : 0;
 		return l;
 	case EVAL_INDIRECT_TAG_IOR:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		o = *(cs + 1) % N_EVAL_VARIANTS;
-		l = eval_unary(cs + 2, e, csp);
-		l = e ? e->stag(e->v[o].u, '|', l) : 0;
+		l = eval_unary(cs + 2, e, q, csp);
+		l = (q == EVAL_Evaluate) ? e->stag(e->v[o].u, '|', l) : 0;
 		return l;
 	case EVAL_INDIRECT_TAG_XOR:
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		o = *(cs + 1) % N_EVAL_VARIANTS;
-		l = eval_unary(cs + 2, e, csp);
-		l = e ? e->stag(e->v[o].u, '^', l) : 0;
-		return l;
-	case EVAL_VARIANT_TYPE:
-		EVAL_TOKENPRINT(cs, e);
-		o = *(cs + 1) % N_EVAL_VARIANTS;
-		*csp = cs + 2;
-		l = e ? e->v[o].type : 0;
+		l = eval_unary(cs + 2, e, q, csp);
+		l = (q == EVAL_Evaluate) ? e->stag(e->v[o].u, '^', l) : 0;
 		return l;
 	case EVAL_LOAD:
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_assignment(cs + 1, e, csp);
-		l = e ? e->load(e, l) : 0;
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_assignment(cs + 1, e, q, csp);
+		l = (q == EVAL_Evaluate) ? e->load(e, l) : 0;
 		return l;
 	default:
-		l = eval_primary(cs, e, csp);
+		l = eval_primary(cs, e, q, csp);
 		return l;
 	}
 }
 
-static uint64_t eval_exponentive(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
-	uint64_t l = eval_unary(cs, e, csp);
+static uint64_t eval_exponentive(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
+	uint64_t l = eval_unary(cs, e, q, csp);
 	for(uint8_t o; (o = *(cs = *csp)) != EVAL_END;) {
 		switch(o) {
 			uint64_t r;
 		case EVAL_BINARY_LEFT_SHIFT:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_unary(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_unary(cs + 1, e, q, csp);
 			l = l << (r & 63u);
 			continue;
 		case EVAL_BINARY_RIGHT_SHIFT:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_unary(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_unary(cs + 1, e, q, csp);
 			l = l >> (r & 63u);
 			continue;
 		case EVAL_BINARY_LEFT_ROTATE:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_unary(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_unary(cs + 1, e, q, csp);
 			l = (l << (r & 63u)) | (l >> (-r & 63u));
 			continue;
 		case EVAL_BINARY_RIGHT_ROTATE:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_unary(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_unary(cs + 1, e, q, csp);
 			l = (l << (-r & 63u)) | (l >> (r & 63u));
 			continue;
 		default:
@@ -1365,24 +1401,24 @@ static uint64_t eval_exponentive(uint8_t const *cs, EVAL *e, uint8_t const **csp
 	return l;
 }
 
-static uint64_t eval_multiplicative(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
-	uint64_t l = eval_exponentive(cs, e, csp);
+static uint64_t eval_multiplicative(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
+	uint64_t l = eval_exponentive(cs, e, q, csp);
 	for(uint8_t o; (o = *(cs = *csp)) != EVAL_END;) {
 		switch(o) {
 			uint64_t r;
 		case EVAL_ARITHMETIC_MULTIPLY:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_exponentive(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_exponentive(cs + 1, e, q, csp);
 			l = l * r;
 			continue;
 		case EVAL_ARITHMETIC_DIVIDE:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_exponentive(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_exponentive(cs + 1, e, q, csp);
 			l = r ? l / r : 0;
 			continue;
 		case EVAL_ARITHMETIC_MODULO:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_exponentive(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_exponentive(cs + 1, e, q, csp);
 			l = r ? l % r : 0;
 			continue;
 		default:
@@ -1392,19 +1428,19 @@ static uint64_t eval_multiplicative(uint8_t const *cs, EVAL *e, uint8_t const **
 	return l;
 }
 
-static uint64_t eval_additive(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
-	uint64_t l = eval_multiplicative(cs, e, csp);
+static uint64_t eval_additive(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
+	uint64_t l = eval_multiplicative(cs, e, q, csp);
 	for(uint8_t o; (o = *(cs = *csp)) != EVAL_END;) {
 		switch(o) {
 			uint64_t r;
 		case EVAL_ARITHMETIC_PLUS:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_multiplicative(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_multiplicative(cs + 1, e, q, csp);
 			l = l + r;
 			continue;
 		case EVAL_ARITHMETIC_MINUS:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_multiplicative(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_multiplicative(cs + 1, e, q, csp);
 			l = l - r;
 			continue;
 		default:
@@ -1414,24 +1450,24 @@ static uint64_t eval_additive(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	return l;
 }
 
-static uint64_t eval_bitwise(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
-	uint64_t l = eval_additive(cs, e, csp);
+static uint64_t eval_bitwise(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
+	uint64_t l = eval_additive(cs, e, q, csp);
 	for(uint8_t o; (o = *(cs = *csp)) != EVAL_END;) {
 		switch(o) {
 			uint64_t r;
 		case EVAL_BINARY_OR:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_additive(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_additive(cs + 1, e, q, csp);
 			l = l | r;
 			continue;
 		case EVAL_BINARY_AND:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_additive(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_additive(cs + 1, e, q, csp);
 			l = l & r;
 			continue;
 		case EVAL_BINARY_XOR:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_additive(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_additive(cs + 1, e, q, csp);
 			l = l ^ r;
 			continue;
 		default:
@@ -1441,39 +1477,39 @@ static uint64_t eval_bitwise(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	return l;
 }
 
-static uint64_t eval_relation(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
-	uint64_t l = eval_bitwise(cs, e, csp);
+static uint64_t eval_relation(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
+	uint64_t l = eval_bitwise(cs, e, q, csp);
 	for(uint8_t o; (o = *(cs = *csp)) != EVAL_END;) {
 		switch(o) {
 			uint64_t r;
 		case EVAL_RELATION_EQUAL:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_bitwise(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_bitwise(cs + 1, e, q, csp);
 			l = l == r;
 			continue;
 		case EVAL_RELATION_NOT_EQUAL:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_bitwise(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_bitwise(cs + 1, e, q, csp);
 			l = l != r;
 			continue;
 		case EVAL_RELATION_LESS_THAN:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_bitwise(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_bitwise(cs + 1, e, q, csp);
 			l = l < r;
 			continue;
 		case EVAL_RELATION_LESS_THAN_OR_EQUAL:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_bitwise(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_bitwise(cs + 1, e, q, csp);
 			l = l <= r;
 			continue;
 		case EVAL_RELATION_MORE_THAN:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_bitwise(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_bitwise(cs + 1, e, q, csp);
 			l = l > r;
 			continue;
 		case EVAL_RELATION_MORE_THAN_OR_EQUAL:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_bitwise(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_bitwise(cs + 1, e, q, csp);
 			l = l >= r;
 			continue;
 		default:
@@ -1483,19 +1519,19 @@ static uint64_t eval_relation(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	return l;
 }
 
-static uint64_t eval_boolean(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
-	uint64_t l = eval_relation(cs, e, csp);
+static uint64_t eval_boolean(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
+	uint64_t l = eval_relation(cs, e, q, csp);
 	for(uint8_t o; (o = *(cs = *csp)) != EVAL_END;) {
 		switch(o) {
 			uint64_t r;
 		case EVAL_BOOLEAN_OR:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_relation(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_relation(cs + 1, e, q, csp);
 			l = l || r;
 			continue;
 		case EVAL_BOOLEAN_AND:
-			EVAL_TOKENPRINT(cs, e);
-			r = eval_relation(cs + 1, e, csp);
+			EVAL_TOKENPRINT(cs, e, q);
+			r = eval_relation(cs + 1, e, q, csp);
 			l = l && r;
 			continue;
 		default:
@@ -1505,17 +1541,17 @@ static uint64_t eval_boolean(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	return l;
 }
 
-static uint64_t eval_condition(uint8_t const *cs, EVAL *e, uint8_t const **csp);
+static uint64_t eval_condition(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp);
 
-static uint64_t eval_alternation(uint8_t const *cs, EVAL *e, uint8_t const **csp, uint64_t cond) {
+static uint64_t eval_alternation(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp, uint64_t cond) {
 	uint8_t const *ct = cs;
 	uint64_t a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
 	cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
 	uint64_t l = 0;
-	if(a && !cond) {
+	if((q != EVAL_Verify) && a && !cond) {
 		*csp = cs += a;
 	} else {
-		l = eval_condition(cs, cond ? e : NULL, csp);
+		l = eval_condition(cs, e, cond ? q : EVAL_NoEvaluate, csp);
 		cs = *csp;
 		if(!a) {
 			a = cs - ct - EVAL__IMMEDIATE_SIZE(N_TOKENS);
@@ -1523,15 +1559,15 @@ static uint64_t eval_alternation(uint8_t const *cs, EVAL *e, uint8_t const **csp
 		}
 	}
 	if(*cs == EVAL_CONDITION_ELSE) {
-		EVAL_TOKENPRINT(cs, e);
+		EVAL_TOKENPRINT(cs, e, q);
 		cs++;
 		ct = cs;
 		a = eval__load_immediate(cs, EVAL__IMMEDIATE_SIZE(N_TOKENS));
 		cs += EVAL__IMMEDIATE_SIZE(N_TOKENS);
-		if(a && cond) {
+		if((q != EVAL_Verify) && a && cond) {
 			*csp = cs += a;
 		} else {
-			uint64_t r = eval_condition(cs, !cond ? e : NULL, csp);
+			uint64_t r = eval_condition(cs, e, cond ? EVAL_NoEvaluate : q, csp);
 			cs = *csp;
 			if(!a) {
 				a = cs - ct - EVAL__IMMEDIATE_SIZE(N_TOKENS);
@@ -1545,69 +1581,95 @@ static uint64_t eval_alternation(uint8_t const *cs, EVAL *e, uint8_t const **csp
 	return l;
 }
 
-static uint64_t eval_condition(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
-	uint64_t l = eval_boolean(cs, e, csp);
+static uint64_t eval_condition(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
+	uint64_t l = eval_boolean(cs, e, q, csp);
 	while(*(cs = *csp) == EVAL_CONDITION_IF) {
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_alternation(cs + 1, e, csp, l);
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_alternation(cs + 1, e, q, csp, l);
 	}
 	return l;
 }
 
-static uint64_t eval_assignment(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
-	uint64_t l;
+static uint64_t eval_assignment(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
+	uint64_t l = 0, x;
 	uint8_t  o = *cs;
 	switch(o) {
+	case EVAL_INDEXED_VARIANT:
+		uint8_t const *ct = cs + 1;
+		uint8_t       *t  = (uint8_t *)ct;
+		uint64_t       n  = eval__load_immediate(ct, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+		ct += EVAL__IMMEDIATE_SIZE(N_TOKENS);
+		if(n == 0) {
+			(void)eval_primary(ct, e, q, csp);
+			ct = *csp;
+			n = ct - (t + EVAL__IMMEDIATE_SIZE(N_TOKENS));
+			eval__save_immediate(n, t, EVAL__IMMEDIATE_SIZE(N_TOKENS));
+		} else {
+			ct += n;
+		}
+		if(*ct != EVAL_ASSIGN) {
+			goto case_default;
+		}
+		cs = t + EVAL__IMMEDIATE_SIZE(N_TOKENS);
+		if(q == EVAL_Evaluate) {
+			x = eval_primary(cs, e, q, csp) % N_EVAL_VARIANTS;
+			l = eval_assignment(cs + n + 1, e, q, csp);
+			e->v[x].u = l;
+		} else {
+			l = eval_assignment(cs + n + 1, e, q, csp);
+		}
+		return l;
 	case EVAL_VARIANT:
 	case EVAL_INDIRECT:
 		if(*(cs + 2) == EVAL_ASSIGN) {
-			EVAL_TOKENPRINT(cs, e);
-			EVAL_TOKENPRINT(cs + 2, e);
-			int i = *(cs + 1) % N_EVAL_VARIANTS;
-			l = eval_assignment(cs + 3, e, csp);
-			if(e) {
+			EVAL_TOKENPRINT(cs, e, q);
+			EVAL_TOKENPRINT(cs + 2, e, q);
+			x = *(cs + 1) % N_EVAL_VARIANTS;
+			l = eval_assignment(cs + 3, e, q, csp);
+			if(q == EVAL_Evaluate) {
 				if(o == EVAL_INDIRECT) {
-					*e->symp(e->v[i].u) = l;
+					*e->symp(e->v[x].u) = l;
 				} else {
-					e->v[i].u = l;
+					e->v[x].u = l;
 				}
 			}
 			return l;
 		}
-		// fallthrough
+		[[fallthrough]];
 	default:
-		l = eval_condition(cs, e, csp);
+	case_default:
+		l = eval_condition(cs, e, q, csp);
 		if(*(cs = *csp) == EVAL_EMIT) {
-			EVAL_TOKENPRINT(cs, e);
-			uint64_t r = eval_assignment(cs + 1, e, csp);
-			l = e ? e->emit(e, l, r) : r;
+			EVAL_TOKENPRINT(cs, e, q);
+			uint64_t r = eval_assignment(cs + 1, e, q, csp);
+			l = (q == EVAL_Evaluate) ? e->emit(e, l, r) : r;
 		}
 		return l;
 	}
 }
 
-static uint64_t eval_sequence(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
-	uint64_t l = eval_assignment(cs, e, csp);
+static uint64_t eval_sequence(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t const **csp) {
+	uint64_t l = eval_assignment(cs, e, q, csp);
 	while(*(cs = *csp) == EVAL_SEQUENCE) {
-		EVAL_TOKENPRINT(cs, e);
-		l = eval_assignment(cs + 1, e, csp);
+		EVAL_TOKENPRINT(cs, e, q);
+		l = eval_assignment(cs + 1, e, q, csp);
 	}
 	return l;
 }
 
 //------------------------------------------------------------------------------
 
-static int eval_verify_expression(uint8_t const *cs, uint8_t const **csp) {
+static int eval_verify_expression(uint8_t const *cs, EVAL *e, uint8_t const **csp) {
 	if(!csp) csp = &cs;
-	(void)eval_sequence(cs, NULL, csp);
+	(void)eval_sequence(cs, e, EVAL_Verify, csp);
 	return *cs;
 }
-#define eval_verify_expression(eval_verify_expression__cs,...) \
-	(eval_verify_expression)((eval_verify_expression__cs),(__VA_ARGS__+0))
+#define eval_verify_expression(eval_verify_expression__cs,eval_verify_expression__env,...) \
+	(eval_verify_expression)((eval_verify_expression__cs),(eval_verify_expression__env),(__VA_ARGS__+0))
 
 static inline uint64_t eval_expression(uint8_t const *cs, EVAL *e) {
-	uint64_t l = eval_sequence(cs, e, &cs);
-	EVAL_TOKENPRINT(cs, e);
+	uint64_t l = eval_sequence(cs, e, EVAL_Evaluate, &cs);
+	EVAL_TOKENPRINT(cs, e, EVAL_Evaluate);
 	return l;
 }
 

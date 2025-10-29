@@ -23,7 +23,7 @@ static void license(void) {
 	puts("SOFTWARE.");
 }
 #ifndef VERSION
-#	define VERSION  3.6.0
+#	define VERSION  3.7.0
 #endif
 //
 // Build with https://github.com/stytri/m
@@ -244,6 +244,12 @@ static void readme(char *arg0) {
 	puts("");
 	puts("When parsing instructions, operand values are sequentially assigned to variants starting at `$1`.");
 	puts("");
+	puts("#### indexed variants");
+	puts("");
+	puts("Indexed Variants are an initial `$`, followed by parenthesis enclosed expression; the result of evaluating the expression is the variant number");
+	puts("");
+	puts("Operations on Indexed Variants are restricted to assigning and obtaining their value.");
+	puts("");
 	puts("#### operators");
 	puts("");
 	puts("Operators in order of increasing precedence are:");
@@ -259,7 +265,7 @@ static void readme(char *arg0) {
 	puts("\n&emsp;is the **emit** operator; it writes a single **byte** from the _value_ sub-expression to the memory at the _address_ sub-expression.");
 	puts("");
 	puts("_variant_ `=` _value_");
-	puts("\n&emsp;assigns the _value_ sub-expression to a _variant_.");
+	puts("\n&emsp;assigns the _value_ sub-expression to a _variant_, or, _indexed variant_.");
 	puts("");
 	puts("##### condition");
 	puts("");
@@ -883,7 +889,7 @@ static inline size_t trimspace(char const *cs, size_t n) {
 	return n;
 }
 
-static STRING compile_expression(void *p) {
+static STRING compile_expression(void *p, EVAL *env) {
 	STRING expr = eval_tokenize(p, evals_getc, evals_ungetc, getfunc, getconst, '}',
 		STRING((N_TOKENS - 1) - n_token,
 			&token[n_token]
@@ -892,7 +898,7 @@ static STRING compile_expression(void *p) {
 	);
 	if(expr.len > 0) {
 		n_token += expr.len;
-		int e = eval_verify_expression(expr.str);
+		int e = eval_verify_expression(expr.str, env);
 		if(e) {
 			report_source_error(eval_error_message(e));
 			return STRING(0, "");
@@ -959,7 +965,7 @@ static char const *process_directive(char const *cs) {
 		) {
 			report_source_error("too many functions");
 		}
-		rpl = compile_expression(&cs);
+		rpl = compile_expression(&cs, &env);
 		n   = strcspn(cs, "}");
 		cs += n;
 		if(sp) {
@@ -975,7 +981,7 @@ static char const *process_directive(char const *cs) {
 			val = VALUE(u, 0);
 			if(cs[n] == '=') {
 				cs += n + 1;
-				xpr = compile_expression(&cs);
+				xpr = compile_expression(&cs, &env);
 				val.u = eval_expression(xpr.str, &env);
 				cs -= (xpr.len > 0); // restore terminating '}'
 				n = 0;
@@ -1010,7 +1016,7 @@ static char const *process_directive(char const *cs) {
 			val = VALUE(u, 0);
 			if(cs[n] == '=') {
 				cs += n + 1;
-				xpr = compile_expression(&cs);
+				xpr = compile_expression(&cs, &env);
 				val.u = eval_expression(xpr.str, &env);
 				cs -= (xpr.len > 0); // restore terminating '}'
 				n = 0;
@@ -1075,7 +1081,7 @@ static char const *define_instruction(char const *cs) {
 		return NULL;
 	}
 	cs = cr + 1;
-	STRING rpl = compile_expression(&cs);
+	STRING rpl = compile_expression(&cs, &env);
 	if(rpl.len == 0) {
 		report_source_error("invalid instruction expression");
 		return cs;
@@ -1090,7 +1096,7 @@ static char const *define_instruction(char const *cs) {
 			ct++;
 		}
 		cs = ct;
-		ltx = compile_expression(&cs);
+		ltx = compile_expression(&cs, &env);
 		if(ltx.len == 0) {
 			report_source_error("invalid link expression");
 			return cs;
