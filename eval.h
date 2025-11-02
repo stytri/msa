@@ -38,6 +38,7 @@ typedef struct eval {
 	uint64_t (*emit)(struct eval *e, uint64_t a, uint64_t v);
 	uint64_t (*load)(struct eval *e, uint64_t a);
 	uint64_t (*func)(struct eval *e, uint16_t a);
+	uint64_t (*anon)(void);
 	uint64_t*(*symp)(uint64_t a);
 	uint64_t (*stag)(uint64_t a, int op, uint64_t);
 	uint64_t (*tag) (int op, uint64_t);
@@ -68,6 +69,10 @@ static uint64_t eval_nul_func(EVAL *, uint8_t, uint64_t v) {
 static uint64_t *eval_nul_symp(uint64_t) {
 	static uint64_t dummy = 0;
 	return &dummy;
+}
+
+static uint64_t eval_nul_anon(void) {
+	return 0;
 }
 
 static uint64_t eval_nul_stag(uint64_t, int, uint64_t) {
@@ -149,6 +154,8 @@ static uint64_t eval_nul_tag(int, uint64_t) {
 	ENUM(INDIRECT_TAG_AND, "@&") \
 	ENUM(INDIRECT_TAG_IOR, "@|") \
 	ENUM(INDIRECT_TAG_XOR, "@^") \
+\
+	ENUM(ANONYMOUS, "@:") \
 \
 	ENUM(FUNCTION, "()") \
 \
@@ -874,6 +881,14 @@ static STRING eval_tokenize(
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
 				continue;
+			case ':':
+				if(state < 2) {
+					((uint8_t *)t.str)[t.len++] = EVAL_ANONYMOUS;
+					state = 2;
+					continue;
+				}
+				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
+				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
 			state = 1;
@@ -1201,6 +1216,9 @@ static uint64_t eval_primary(uint8_t const *cs, EVAL *e, EVAL_TYPE q, uint8_t co
 		}
 		l = (q == EVAL_Evaluate) ? *e->symp(e->v[*cs % N_EVAL_VARIANTS].u) : 0;
 		*csp = cs + 1;
+		return l;
+	case EVAL_ANONYMOUS:
+		l = (q == EVAL_Evaluate) ? e->anon() : 0;
 		return l;
 	case EVAL_FUNCTION:
 		EVAL_TOKENPRINT(cs, e, q);

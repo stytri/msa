@@ -411,6 +411,9 @@ static void readme(char *arg0) {
 	puts("_identifier_");
 	puts("\n&emsp;The value assigned to (non-function) _identifier_ is returned.");
 	puts("");
+	puts("`@:`");
+	puts("\n&emsp;Creates an anonymous symbol.");
+	puts("");
 	puts("`INVALIDADDRESS`");
 	puts("\n&emsp;outputs an invalid address error message.");
 	puts("\n&emsp;returns `0`.");
@@ -827,6 +830,14 @@ static uint64_t tag(int op, uint64_t u) {
 	}
 }
 
+static uint64_t anonsym(void) {
+	SYMBOL *sp = symbol_anonymous(N_SYMBOLS, symtab, '@', tag('?', 0));
+	if(!sp) {
+		report_source_error("too many anonymous symbols");
+	}
+	return (uint64_t)sp;
+}
+
 static int getfunc(size_t n, char const s[]) {
 	SYMBOL *sp = symbol_lookup(N_FUNCTIONS, funtab, STRING(n, s));
 	if(sp) {
@@ -851,6 +862,7 @@ static EVAL env = {
 	.emit  = emit8,
 	.load  = load8,
 	.func  = callfunc,
+	.anon  = anonsym,
 	.symp  = symptr,
 	.stag  = symtag,
 	.tag   = tag,
@@ -1151,7 +1163,7 @@ static char const *compile_instruction(char const *cs) {
 				c = *++cs;
 			} while((quote && isgraph(c)) || (c == '`') || (c == '_') || (c == '$') || isalnum(c))
 				;
-			uint64_t st = tag(false, -1) | (hidden ? HIDDEN_SYMBOL : 0);
+			uint64_t st = tag('?', 0) | (hidden ? HIDDEN_SYMBOL : 0);
 			SYMBOL *sp = symbol_intern(N_SYMBOLS, symtab, '@', st, STRING(cs - ct, ct), rpladdr, VALUE(u, 0));
 			if(!sp) {
 				report_source_error("too many symbols");
@@ -1599,7 +1611,7 @@ static void apply_patches(void) {
 		size_t  const  n = xref[i].type >> 8;
 		uint8_t const *l = xref[i++].p;
 		size_t         j = 0;
-		for(tag(true, xref[i++].u); j < n;) {
+		for(tag('=', xref[i++].u); j < n;) {
 			env.v[j++] = xref[i++];
 		}
 		if(l) {

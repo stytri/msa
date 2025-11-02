@@ -100,6 +100,23 @@ static SYMBOL *symbol_intern(size_t n_symbols, SYMTAB *tab, int type, uint64_t t
 	return NULL;
 }
 
+static SYMBOL *symbol_anonymous(size_t n_symbols, SYMTAB *tab, int type, uint64_t tag) {
+#define ANON_SYMBOL_SIZE \
+	(3 \
+	+ (3 * (N_SYMBOLS > 999ul)) \
+	+ (3 * (N_SYMBOLS > 999999ul)) \
+	+ (3 * (N_SYMBOLS > 999999999ul)) \
+	)
+	static size_t count = 0;
+	static char   anon[1+ANON_SYMBOL_SIZE+1];
+	if(count == N_SYMBOLS) {
+		return NULL;
+	}
+	int n = sprintf(anon, "#%.*zu", ANON_SYMBOL_SIZE, count++);
+	return symbol_intern(n_symbols, tab, type, HIDDEN_SYMBOL|tag, STRING(n, anon), STRING(0, ""), VALUE(u, 0));
+#undef ANON_SYMBOL_SIZE
+}
+
 //------------------------------------------------------------------------------
 
 #endif//ndef SYMBOL_H

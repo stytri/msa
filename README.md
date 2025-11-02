@@ -446,6 +446,10 @@ _identifier_
 
 &emsp;The value assigned to (non-function) _identifier_ is returned.
 
+`@:`
+
+&emsp;Creates an anonymous symbol.
+
 `INVALIDADDRESS`
 
 &emsp;outputs an invalid address error message.
