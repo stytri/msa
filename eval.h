@@ -410,16 +410,17 @@ static STRING eval_tokenize(
 	int   (*unget)(int, void *),
 	int   (*getfn)(size_t n, char const s[]),
 	int   (*getconst)(size_t n, char const s[], uint64_t *p),
+	void  (*print)(char const *, ...),
 	int     end,
 	STRING  token,
 	size_t *linenop
 ) {
 	STRING t = STRING(0, token.str);
 #	define EVAL_TOKENIZE__ERROR(EVAL_TOKENIZE__error) \
-	if((t.len == 0) || (((uint8_t *)t.str)[t.len - 1] != (EVAL_TOKENIZE__error))) { \
-		((uint8_t *)t.str)[t.len++] = EVAL_TOKENIZE__error; \
+	if(cec++ == 0) { \
+		print(eval_error_message(EVAL_TOKENIZE__error)); \
 	} else do {;} while(0)
-	for(int paren = 0, state = 1, c;;) {
+	for(int cec = 0, paren = 0, state = 1, c;;) {
 		while((c = get(p)) && !isgraph(c)) {
 			if(c == '\n') {
 				++*linenop;
@@ -441,11 +442,13 @@ static STRING eval_tokenize(
 					break;
 				}
 			}
+			cec = 0;
 			continue;
 		case ',':
 			if(state > 1) {
 				((uint8_t *)t.str)[t.len++] = EVAL_SEQUENCE;
 				state = 1;
+				cec = 0;
 				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -455,6 +458,7 @@ static STRING eval_tokenize(
 			if(state < 2) {
 				paren++;
 				((uint8_t *)t.str)[t.len++] = EVAL_PARENTHESIS_LEFT;
+				cec = 0;
 				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -465,6 +469,7 @@ static STRING eval_tokenize(
 					paren--;
 					((uint8_t *)t.str)[t.len++] = EVAL_PARENTHESIS_RIGHT;
 					state = 2;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_PARENTHESIS);
@@ -480,6 +485,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_EQUAL;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -487,6 +493,7 @@ static STRING eval_tokenize(
 			case '@':
 				if(state < 2) {
 					((uint8_t *)t.str)[t.len++] = EVAL_LOAD;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -496,6 +503,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_ASSIGN;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -508,6 +516,7 @@ static STRING eval_tokenize(
 					eval__save_immediate(0, &((uint8_t *)t.str)[t.len], EVAL__IMMEDIATE_SIZE(N_TOKENS));
 					t.len += EVAL__IMMEDIATE_SIZE(N_TOKENS);
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				errno = ENOMEM;
@@ -522,6 +531,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_NOT_EQUAL;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -534,6 +544,7 @@ static STRING eval_tokenize(
 						eval__save_immediate(0, &((uint8_t *)t.str)[t.len], EVAL__IMMEDIATE_SIZE(N_TOKENS));
 						t.len += EVAL__IMMEDIATE_SIZE(N_TOKENS);
 						state = 1;
+						cec = 0;
 						continue;
 					}
 					errno = ENOMEM;
@@ -549,6 +560,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_AND;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -558,6 +570,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_BINARY_AND;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -570,6 +583,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_BOOLEAN_OR;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -579,9 +593,11 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_BINARY_OR;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				((uint8_t *)t.str)[t.len++] = EVAL_BINARY_MSB;
+				cec = 0;
 				continue;
 			}
 		case '<':
@@ -594,6 +610,7 @@ static STRING eval_tokenize(
 					if(state > 1) {
 						((uint8_t *)t.str)[t.len++] = EVAL_BINARY_LEFT_ROTATE;
 						state = 1;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -603,6 +620,7 @@ static STRING eval_tokenize(
 					if(state > 1) {
 						((uint8_t *)t.str)[t.len++] = EVAL_BINARY_LEFT_SHIFT;
 						state = 1;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -615,6 +633,7 @@ static STRING eval_tokenize(
 					if(state > 1) {
 						((uint8_t *)t.str)[t.len++] = EVAL_BINARY_RIGHT_ROTATE;
 						state = 1;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -624,6 +643,7 @@ static STRING eval_tokenize(
 					if(state > 1) {
 						((uint8_t *)t.str)[t.len++] = EVAL_RELATION_NOT_EQUAL;
 						state = 1;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -633,6 +653,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_LESS_THAN_OR_EQUAL;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -642,6 +663,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_LESS_THAN;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -654,6 +676,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_BINARY_RIGHT_SHIFT;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -662,6 +685,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_MORE_THAN_OR_EQUAL;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -671,6 +695,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_RELATION_MORE_THAN;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -680,6 +705,7 @@ static STRING eval_tokenize(
 			if(state > 1) {
 				((uint8_t *)t.str)[t.len++] = EVAL_BINARY_XOR;
 				state = 1;
+				cec = 0;
 				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -687,6 +713,7 @@ static STRING eval_tokenize(
 		case '~':
 			if(state < 2) {
 				((uint8_t *)t.str)[t.len++] = EVAL_BINARY_COMPLIMENT;
+				cec = 0;
 				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -698,6 +725,7 @@ static STRING eval_tokenize(
 				if(state > 2) {
 					((uint8_t *)t.str)[t.len++] = EVAL_INCREMENT;
 					state = 2;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -708,10 +736,12 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_PLUS;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 //              REDUNDANT: ELIDED
 //				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_PLUS;
+				cec = 0;
 				continue;
 			}
 		case '-':
@@ -721,6 +751,7 @@ static STRING eval_tokenize(
 				if(state > 2) {
 					((uint8_t *)t.str)[t.len++] = EVAL_DECREMENT;
 					state = 2;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -731,15 +762,18 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_MINUS;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_NEGATE;
+				cec = 0;
 				continue;
 			}
 		case '*':
 			if(state > 1) {
 				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_MULTIPLY;
 				state = 1;
+				cec = 0;
 				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -748,6 +782,7 @@ static STRING eval_tokenize(
 			if(state > 1) {
 				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_DIVIDE;
 				state = 1;
+				cec = 0;
 				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -756,6 +791,7 @@ static STRING eval_tokenize(
 			if(state > 1) {
 				((uint8_t *)t.str)[t.len++] = EVAL_ARITHMETIC_MODULO;
 				state = 1;
+				cec = 0;
 				continue;
 			}
 			EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -772,6 +808,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = c;
 					if(state < 2) {
 						state = s;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -801,6 +838,7 @@ static STRING eval_tokenize(
 			case '&':
 				if(state < 2) {
 					((uint8_t *)t.str)[t.len++] = EVAL_TAG_AND;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -808,6 +846,7 @@ static STRING eval_tokenize(
 			case '|':
 				if(state < 2) {
 					((uint8_t *)t.str)[t.len++] = EVAL_TAG_IOR;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -815,6 +854,7 @@ static STRING eval_tokenize(
 			case '^':
 				if(state < 2) {
 					((uint8_t *)t.str)[t.len++] = EVAL_TAG_XOR;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -822,6 +862,7 @@ static STRING eval_tokenize(
 			case '=':
 				if(state < 2) {
 					((uint8_t *)t.str)[t.len++] = EVAL_TAG_SET;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -839,6 +880,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = c;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -864,6 +906,7 @@ static STRING eval_tokenize(
 						((uint8_t *)t.str)[t.len++] = tag_op_token[tag_op];
 						((uint8_t *)t.str)[t.len++] = c;
 						if(state < 2) {
+							cec = 0;
 							continue;
 						}
 						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -877,6 +920,7 @@ static STRING eval_tokenize(
 				if(state > 1) {
 					((uint8_t *)t.str)[t.len++] = EVAL_EMIT;
 					state = 1;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -885,6 +929,7 @@ static STRING eval_tokenize(
 				if(state < 2) {
 					((uint8_t *)t.str)[t.len++] = EVAL_ANONYMOUS;
 					state = 2;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERATOR);
@@ -914,6 +959,7 @@ static STRING eval_tokenize(
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_CHARACTER);
 				if(state < 2) {
 					state = 2;
+					cec = 0;
 					continue;
 				}
 				EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -928,6 +974,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = EVAL_SMALLINT | u;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -941,6 +988,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = EVAL_MASK_BIT | b;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -954,6 +1002,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = EVAL_BIT_MASK | b;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -967,6 +1016,7 @@ static STRING eval_tokenize(
 						((uint8_t *)t.str)[t.len++] = x & 255u;
 						if(state < 2) {
 							state = 2;
+							cec = 0;
 							continue;
 						}
 						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -982,6 +1032,7 @@ static STRING eval_tokenize(
 						((uint8_t *)t.str)[t.len++] = (x >> 8) & 255u;
 						if(state < 2) {
 							state = 2;
+							cec = 0;
 							continue;
 						}
 						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -999,6 +1050,7 @@ static STRING eval_tokenize(
 						((uint8_t *)t.str)[t.len++] = (x >> 24) & 255u;
 						if(state < 2) {
 							state = 2;
+							cec = 0;
 							continue;
 						}
 						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -1019,6 +1071,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = (x >> 56) & 255u;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -1052,6 +1105,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = EVAL_SMALLINT | 1;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -1061,6 +1115,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = EVAL_SMALLINT | 0;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -1070,6 +1125,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = EVAL_ERROR_ADDRESS;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -1079,6 +1135,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = EVAL_ERROR_OFFSET;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -1088,6 +1145,7 @@ static STRING eval_tokenize(
 					((uint8_t *)t.str)[t.len++] = EVAL_ERROR_INVALID;
 					if(state < 2) {
 						state = 2;
+						cec = 0;
 						continue;
 					}
 					EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);
@@ -1101,6 +1159,7 @@ static STRING eval_tokenize(
 						t.len += EVAL__IMMEDIATE_SIZE(N_FUNCTIONS);
 						if(state < 2) {
 							state = 2;
+							cec = 0;
 							continue;
 						}
 						EVAL_TOKENIZE__ERROR(EVAL_ERROR_OPERAND);

@@ -902,8 +902,8 @@ static inline size_t trimspace(char const *cs, size_t n) {
 }
 
 static STRING compile_expression(void *p, EVAL *env) {
-	STRING expr = eval_tokenize(p, evals_getc, evals_ungetc, getfunc, getconst, '}',
-		STRING((N_TOKENS - 1) - n_token,
+	STRING expr = eval_tokenize(p, evals_getc, evals_ungetc, getfunc, getconst, report_source_error, '}',
+		STRING(N_TOKENS - n_token,
 			&token[n_token]
 		),
 		&lineno
