@@ -413,12 +413,13 @@ static STRING eval_tokenize(
 	void  (*print)(char const *, ...),
 	int     end,
 	STRING  token,
-	size_t *linenop
+	size_t *linenop,
+	int    *ep
 ) {
 	STRING t = STRING(0, token.str);
 #	define EVAL_TOKENIZE__ERROR(EVAL_TOKENIZE__error) \
 	if(cec++ == 0) { \
-		print(eval_error_message(EVAL_TOKENIZE__error)); \
+		++*ep, print(eval_error_message(EVAL_TOKENIZE__error)); \
 	} else do {;} while(0)
 	for(int cec = 0, paren = 0, state = 1, c;;) {
 		while((c = get(p)) && !isgraph(c)) {

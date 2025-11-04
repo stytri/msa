@@ -902,15 +902,20 @@ static inline size_t trimspace(char const *cs, size_t n) {
 }
 
 static STRING compile_expression(void *p, EVAL *env) {
-	STRING expr = eval_tokenize(p, evals_getc, evals_ungetc, getfunc, getconst, report_source_error, '}',
-		STRING(N_TOKENS - n_token,
-			&token[n_token]
-		),
-		&lineno
+	int e = 0;
+	STRING expr = eval_tokenize(p,
+		evals_getc, evals_ungetc, getfunc, getconst, report_source_error,
+		'}',
+		STRING(N_TOKENS - n_token, &token[n_token]),
+		&lineno,
+		&e
 	);
+	if(e != 0) {
+		return STRING(0, "");
+	}
 	if(expr.len > 0) {
 		n_token += expr.len;
-		int e = eval_verify_expression(expr.str, env);
+		e = eval_verify_expression(expr.str, env);
 		if(e) {
 			report_source_error(eval_error_message(e));
 			return STRING(0, "");
@@ -978,6 +983,9 @@ static char const *process_directive(char const *cs) {
 			report_source_error("too many functions");
 		}
 		rpl = compile_expression(&cs, &env);
+		if(rpl.len == 0) {
+			report_source_error("invalid function expression");
+		}
 		n   = strcspn(cs, "}");
 		cs += n;
 		if(sp) {
@@ -994,6 +1002,9 @@ static char const *process_directive(char const *cs) {
 			if(cs[n] == '=') {
 				cs += n + 1;
 				xpr = compile_expression(&cs, &env);
+				if(xpr.len == 0) {
+					report_source_error("invalid set expression");
+				}
 				val.u = eval_expression(xpr.str, &env);
 				cs -= (xpr.len > 0); // restore terminating '}'
 				n = 0;
@@ -1029,6 +1040,9 @@ static char const *process_directive(char const *cs) {
 			if(cs[n] == '=') {
 				cs += n + 1;
 				xpr = compile_expression(&cs, &env);
+				if(xpr.len == 0) {
+					report_source_error("invalid value expression");
+				}
 				val.u = eval_expression(xpr.str, &env);
 				cs -= (xpr.len > 0); // restore terminating '}'
 				n = 0;
